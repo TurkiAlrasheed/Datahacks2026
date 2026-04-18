@@ -1,0 +1,27 @@
+# Data files
+observations-711989/observations-711989.csv
+observations-711989/data.zip
+
+# Raw and processed images
+species_identification/images_raw/
+species_identification/data/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.env
+.venv
+venv/
+
+# macOS
+.DS_Store
