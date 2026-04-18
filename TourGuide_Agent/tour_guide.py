@@ -1,0 +1,256 @@
+"""Eco Tour Guide agent for the DataHacks 2026 project.
+
+Two entry points:
+
+- `narrate(Observation)` — one-shot ranger narration for a single sighting,
+  no memory. Useful for smoke tests.
+- `TourSession` — stateful multi-turn tour. Call `session.see(observation)`
+  when the visitor points the device at a plant or animal, and `session.ask(text)`
+  when they speak in natural language. The session remembers every species
+  shown so far, skips re-narration on repeats (offering to retell instead),
+  and can draw connections between current and past species when relevant.
+
+Demo target is La Jolla Cove, so La Jolla is the default location and the
+ranger persona is scoped to that ecosystem.
+"""
+
+from __future__ import annotations
+
+import base64
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+
+import anthropic
+
+
+DEFAULT_LOCATION = "La Jolla Cove, San Diego, California"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+
+
+RANGER_SYSTEM_PROMPT = """You are a park ranger at La Jolla Cove in San Diego, California — a marine-protected stretch of Pacific coastline inside the San Diego–La Jolla Ecological Reserve, bordered by the Matlahuayl State Marine Reserve. A visitor is walking the cove with a camera and a device that identifies plants and animals. You respond to whatever they show you or ask you.
+
+How to respond depends on what the visitor does.
+
+NEW SIGHTING — a species they have not shown you yet on this tour. Give a two-part narration, separated by a single blank line. No headings, bullets, or markdown.
+Part 1 (roughly 120–180 words): introduce the species by common name, share a few vivid, specific facts about how it lives (diet, behavior, size, lifespan, distinctive traits), and tie those facts to La Jolla Cove's ecosystem and to what is happening here at this time of year. Speak directly to the visitor ("notice how…"). Ground your observations in the image when you can. Keep it warm and conversational — like a real ranger, not a textbook.
+Part 2 (roughly 40–70 words): specific, concrete threats facing this species and its habitat — warming or acidifying ocean water, plastic and stormwater runoff, human disturbance, habitat loss, fisheries bycatch, disease, invasive competitors, whatever is most relevant here. Relate these to how humans are impacting the ecosystem and species. Be species-specific and place-specific, not generic environmentalism.
+
+REPEAT SIGHTING — a species already covered earlier on this tour. Do NOT re-narrate. Briefly acknowledge the sighting ("ah, another [common name] — we looked at these earlier") and ask if they would like to hear about it again. Two or three sentences. No Part 2.
+
+QUESTION — free-form text from the visitor, not a sighting. Answer conversationally, 2–4 sentences typically. No two-part format, no headings, no markdown. If the question naturally connects to a species already discussed on this tour, weave that connection in (e.g., "like the cormorants we saw earlier, …"). Don't force connections — only make them when they are genuinely interesting or relevant.
+
+YES TO REPEAT — the visitor asks to hear about a species again. Give the full two-part narration, emphasizing different facts than last time.
+
+If the identified species seems inconsistent with what is in the image, trust the image, mention the uncertainty briefly in one sentence, and narrate what you actually see. Never invent facts you are not confident about."""
+
+
+@dataclass
+class Observation:
+    """What the classifier produced, plus when and where it was taken."""
+
+    image_path: str | Path
+    scientific_name: str
+    common_name: str | None = None
+    when: datetime | None = None
+    location: str = DEFAULT_LOCATION
+
+
+_MEDIA_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
+def _season(dt: datetime) -> str:
+    m = dt.month
+    if m in (12, 1, 2):
+        return "winter"
+    if m in (3, 4, 5):
+        return "spring"
+    if m in (6, 7, 8):
+        return "summer"
+    return "fall"
+
+
+def _species_key(scientific_name: str) -> str:
+    """Genus + species, lowercased.
+
+    Drops any subspecies so the same bird identified as the full species
+    once and a local subspecies the next time is treated as a repeat.
+    """
+    parts = scientific_name.split()
+    return " ".join(parts[:2]).lower()
+
+
+def _encode_image(path: Path) -> tuple[str, str]:
+    suffix = path.suffix.lower()
+    if suffix not in _MEDIA_TYPES:
+        raise ValueError(f"Unsupported image extension: {suffix}")
+    data = base64.standard_b64encode(path.read_bytes()).decode("ascii")
+    return _MEDIA_TYPES[suffix], data
+
+
+def _image_block(path: Path) -> dict:
+    media_type, image_b64 = _encode_image(path)
+    return {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": media_type,
+            "data": image_b64,
+        },
+    }
+
+
+def narrate(
+    observation: Observation,
+    *,
+    model: str = DEFAULT_MODEL,
+    client: anthropic.Anthropic | None = None,
+) -> str:
+    """One-shot narration for a single sighting. No memory of prior sightings.
+
+    Use `TourSession` instead for an interactive tour with memory.
+    """
+    client = client or anthropic.Anthropic()
+    when = observation.when or datetime.now()
+    common = observation.common_name or "(common name unknown — use your best knowledge of the scientific name)"
+    user_context = (
+        f"Location: {observation.location}\n"
+        f"Date: {when.strftime('%B %d, %Y')} ({_season(when)})\n"
+        f"Vision model identified: {observation.scientific_name} — {common}\n\n"
+        "New sighting. Give your two-part tour guide narration."
+    )
+
+    response = client.messages.create(
+        model=model,
+        max_tokens=1024,
+        system=[
+            {
+                "type": "text",
+                "text": RANGER_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    _image_block(Path(observation.image_path)),
+                    {"type": "text", "text": user_context},
+                ],
+            }
+        ],
+    )
+
+    return "".join(b.text for b in response.content if b.type == "text")
+
+
+@dataclass
+class _SeenSpecies:
+    scientific_name: str
+    common_name: str | None
+    first_narration: str
+
+
+class TourSession:
+    """Stateful tour with memory of every species the visitor has seen.
+
+    Call `see(observation)` for a sighting (the agent narrates, or acknowledges
+    a repeat and asks if they want to hear it again). Call `ask(text)` for any
+    free-form question — the agent answers conversationally in the context of
+    everything discussed so far on this tour.
+
+    Location and date are session-level and passed to the model so it can tie
+    facts to season. Message history grows across turns so the agent knows
+    which species have been covered.
+    """
+
+    def __init__(
+        self,
+        *,
+        location: str = DEFAULT_LOCATION,
+        when: datetime | None = None,
+        model: str = DEFAULT_MODEL,
+        client: anthropic.Anthropic | None = None,
+    ) -> None:
+        self.client = client or anthropic.Anthropic()
+        self.location = location
+        self.when = when or datetime.now()
+        self.model = model
+        self.messages: list[dict] = []
+        self._species: dict[str, _SeenSpecies] = {}
+
+    @property
+    def species_seen(self) -> list[str]:
+        """Scientific names of species covered so far, in order first seen."""
+        return [s.scientific_name for s in self._species.values()]
+
+    def see(self, observation: Observation) -> str:
+        """Record a sighting and get the ranger's response."""
+        key = _species_key(observation.scientific_name)
+        is_repeat = key in self._species
+        common = observation.common_name
+        display = f"{common} ({observation.scientific_name})" if common else observation.scientific_name
+
+        if is_repeat:
+            user_text = (
+                f"I'm looking at another {display}. "
+                "This is the same species we already covered earlier on this tour."
+            )
+        else:
+            user_text = (
+                f"I'm now looking at: {display}. "
+                "The vision model identified it. New sighting."
+            )
+
+        self.messages.append({
+            "role": "user",
+            "content": [
+                _image_block(Path(observation.image_path)),
+                {"type": "text", "text": user_text},
+            ],
+        })
+
+        reply = self._send()
+
+        if not is_repeat:
+            self._species[key] = _SeenSpecies(
+                scientific_name=observation.scientific_name,
+                common_name=common,
+                first_narration=reply,
+            )
+        return reply
+
+    def ask(self, question: str) -> str:
+        """Ask the ranger a free-form question."""
+        self.messages.append({"role": "user", "content": question})
+        return self._send()
+
+    def _tour_context_block(self) -> str:
+        return (
+            f"Tour info — Location: {self.location}. "
+            f"Date: {self.when.strftime('%B %d, %Y')} ({_season(self.when)})."
+        )
+
+    def _send(self) -> str:
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=1024,
+            system=[
+                {
+                    "type": "text",
+                    "text": RANGER_SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                },
+                {"type": "text", "text": self._tour_context_block()},
+            ],
+            messages=self.messages,
+        )
+        text = "".join(b.text for b in response.content if b.type == "text")
+        self.messages.append({"role": "assistant", "content": text})
+        return text

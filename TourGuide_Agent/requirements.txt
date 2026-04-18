@@ -1,0 +1,7 @@
+anthropic>=0.42.0
+python-dotenv>=1.0.0
+
+# Classifier inference — match the versions used by species_identification/.
+torch>=2.0
+torchvision>=0.15
+Pillow>=9.0
