@@ -42,6 +42,8 @@ QUESTION — free-form text from the visitor, not a sighting. Answer conversatio
 
 YES TO REPEAT — the visitor asks to hear about a species again. Give the full two-part narration, emphasizing different facts than last time.
 
+UNIDENTIFIED IMAGE — a user turn may include one or more images prefixed by a bracketed note that the classifier did not recognize the subject (scenery, an empty view, something outside the 40-species La Jolla catalog). Do NOT invent a species. If the visitor asks about that image, comment briefly on the scene based on what you see, acknowledge that it's not one of our catalogued species, and keep it short and warm — 2 or 3 sentences. If the current message is a new identified sighting, focus on that and ignore the unidentified image unless there's a genuinely relevant connection.
+
 If the identified species seems inconsistent with what is in the image, trust the image, mention the uncertainty briefly in one sentence, and narrate what you actually see. Never invent facts you are not confident about."""
 
 
@@ -184,11 +186,23 @@ class TourSession:
         self.model = model
         self.messages: list[dict] = []
         self._species: dict[str, _SeenSpecies] = {}
+        self._pending_silent_images: list[dict] = []
 
     @property
     def species_seen(self) -> list[str]:
         """Scientific names of species covered so far, in order first seen."""
         return [s.scientific_name for s in self._species.values()]
+
+    def look_at(self, image_path: str | Path) -> None:
+        """Record an image without narrating.
+
+        Use when the classifier is not confident enough to commit to a
+        species (scenery, out-of-catalog subject). The image is buffered
+        and attached to the next `see()` or `ask()` with a note that no
+        species was identified, so the ranger can comment on it if asked.
+        No API call happens here — the agent stays silent until prompted.
+        """
+        self._pending_silent_images.append(_image_block(Path(image_path)))
 
     def see(self, observation: Observation) -> str:
         """Record a sighting and get the ranger's response."""
@@ -208,13 +222,11 @@ class TourSession:
                 "The vision model identified it. New sighting."
             )
 
-        self.messages.append({
-            "role": "user",
-            "content": [
-                _image_block(Path(observation.image_path)),
-                {"type": "text", "text": user_text},
-            ],
-        })
+        content = self._flush_silent() + [
+            _image_block(Path(observation.image_path)),
+            {"type": "text", "text": user_text},
+        ]
+        self.messages.append({"role": "user", "content": content})
 
         reply = self._send()
 
@@ -228,8 +240,23 @@ class TourSession:
 
     def ask(self, question: str) -> str:
         """Ask the ranger a free-form question."""
-        self.messages.append({"role": "user", "content": question})
+        content = self._flush_silent() + [{"type": "text", "text": question}]
+        self.messages.append({"role": "user", "content": content})
         return self._send()
+
+    def _flush_silent(self) -> list[dict]:
+        """Pop any buffered silent images into a content-block prefix."""
+        if not self._pending_silent_images:
+            return []
+        images = self._pending_silent_images
+        self._pending_silent_images = []
+        label = "image" if len(images) == 1 else "images"
+        note = (
+            f"[Earlier I pointed the camera at the {label} above, but our species "
+            "classifier didn't recognize the subject — likely scenery or something "
+            "outside our 40-species La Jolla catalog.]"
+        )
+        return [*images, {"type": "text", "text": note}]
 
     def _tour_context_block(self) -> str:
         return (

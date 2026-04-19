@@ -5,3 +5,8 @@ python-dotenv>=1.0.0
 torch>=2.0
 torchvision>=0.15
 Pillow>=9.0
+
+# Voice I/O (ElevenLabs STT + TTS, mic capture, speaker playback).
+elevenlabs>=2.0
+sounddevice>=0.4
+soundfile>=0.12
