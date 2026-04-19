@@ -3,7 +3,9 @@
 - `VoiceIO.listen()` records the default microphone until the user presses
   Enter, then transcribes via ElevenLabs Scribe. Returns the transcript.
 - `VoiceIO.speak(text)` synthesizes `text` via ElevenLabs TTS and plays it
-  through the default audio output, blocking until playback finishes.
+  through the default audio output. Playback is interruptible: any keypress
+  (Enter on Unix) stops playback early and returns True, so the caller's
+  REPL can pick up the user's next question or image immediately.
 
 Audio is mono PCM — 16 kHz for capture, 22.05 kHz for playback. Requires
 `ELEVEN_LABS_API_KEY` in the environment (loaded from `.env` by `demo.py`).
@@ -13,6 +15,8 @@ from __future__ import annotations
 
 import io
 import os
+import sys
+import time
 
 import numpy as np
 import sounddevice as sd
@@ -54,10 +58,15 @@ class VoiceIO:
             return ""
         return self._transcribe(audio)
 
-    def speak(self, text: str) -> None:
-        """Synthesize `text` and play it through the default audio output."""
+    def speak(self, text: str) -> bool:
+        """Synthesize `text` and play it. Returns True if a keypress stopped playback early.
+
+        Polls for user keystrokes during playback so the visitor can cut the
+        ranger off to ask a new question or show a new image. The caller's
+        REPL loop will read the next query normally after this returns.
+        """
         if not text.strip():
-            return
+            return False
         stream = self.client.text_to_speech.convert(
             voice_id=self.voice_id,
             text=text,
@@ -66,8 +75,12 @@ class VoiceIO:
         )
         audio_bytes = b"".join(stream)
         audio = np.frombuffer(audio_bytes, dtype=np.int16)
+        duration = len(audio) / _PLAYBACK_SR
         sd.play(audio, _PLAYBACK_SR)
-        sd.wait()
+        try:
+            return _wait_or_interrupt(duration)
+        finally:
+            sd.stop()
 
     def _record_until_enter(self) -> np.ndarray:
         frames: list[np.ndarray] = []
@@ -100,3 +113,42 @@ class VoiceIO:
             model_id=self.stt_model,
         )
         return (result.text or "").strip()
+
+
+def _wait_or_interrupt(duration: float) -> bool:
+    """Sleep for `duration` seconds or until the user presses a key.
+
+    On Windows uses msvcrt to detect raw keystrokes (any key interrupts).
+    On Unix uses select() on stdin (line-buffered, so Enter interrupts).
+    Returns True if interrupted, False if the full duration elapsed.
+    Drains whatever the user typed so the next input() starts from a clean prompt.
+    """
+    end = time.monotonic() + duration
+    try:
+        import msvcrt  # Windows only
+    except ImportError:
+        msvcrt = None
+
+    if msvcrt is not None:
+        while time.monotonic() < end:
+            if msvcrt.kbhit():
+                while msvcrt.kbhit():
+                    msvcrt.getwch()
+                return True
+            time.sleep(0.05)
+        return False
+
+    import select
+    while True:
+        remaining = end - time.monotonic()
+        if remaining <= 0:
+            return False
+        r, _, _ = select.select([sys.stdin], [], [], min(0.05, remaining))
+        if r:
+            try:
+                sys.stdin.readline()
+            except Exception:
+                pass
+            return True
+
+

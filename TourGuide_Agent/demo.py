@@ -38,6 +38,10 @@ from tour_guide import Observation, TourSession
 # it to trust the image and refuse to narrate a species it can't actually see.
 CONFIDENCE_THRESHOLD = 0.7
 
+# `seashore` is a negative class — scenery with no catalogued species.
+# Treat a top prediction of `seashore` identically to a low-confidence result.
+NEGATIVE_CLASSES = {"seashore"}
+
 
 HELP = """Commands:
   <Enter>                           — speak your question (press Enter again to stop)
@@ -45,6 +49,9 @@ HELP = """Commands:
   see <image> "<scientific>" ["<common>"] — skip the classifier (quote multi-word names)
   quit                              — exit
   anything else                     — type a question to the ranger
+
+While the ranger is speaking, press any key to cut them off and ask a new
+question or show a new image. (On non-Windows terminals, press Enter.)
 """
 
 
@@ -90,7 +97,8 @@ def main(argv: list[str]) -> int:
         print(text)
         print()
         if voice is not None:
-            voice.speak(text)
+            if voice.speak(text):
+                print("[interrupted — go ahead]")
 
     def do_see(args: list[str]) -> None:
         if not args:
@@ -112,8 +120,12 @@ def main(argv: list[str]) -> int:
                 tag = f" — {p.common_name}" if p.common_name else ""
                 print(f"  {p.probability:6.1%}  {p.scientific_name}{tag}")
             top = predictions[0]
-            if top.probability < CONFIDENCE_THRESHOLD:
-                print(f"\nNo animal detected (top prediction {top.probability:.1%} < threshold {CONFIDENCE_THRESHOLD:.0%}).")
+            is_negative = top.scientific_name.lower() in NEGATIVE_CLASSES
+            if is_negative or top.probability < CONFIDENCE_THRESHOLD:
+                if is_negative:
+                    print(f"\nNo animal detected (top prediction is '{top.scientific_name}', a scenery class).")
+                else:
+                    print(f"\nNo animal detected (top prediction {top.probability:.1%} < threshold {CONFIDENCE_THRESHOLD:.0%}).")
                 print("The ranger will wait. Ask a question if you'd like them to comment on the scene.\n")
                 session.look_at(image_path)
                 return
