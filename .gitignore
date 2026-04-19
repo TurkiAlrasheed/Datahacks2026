@@ -1,4 +1,6 @@
 # Data files
+*.tflite
+.vscode/
 observations-711989/observations-711989.csv
 observations-711989/data.zip
 
