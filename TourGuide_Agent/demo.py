@@ -20,6 +20,7 @@ disabled automatically when stdin is not a terminal (piped / heredoc input).
 
 from __future__ import annotations
 
+import os
 import shlex
 import sys
 from pathlib import Path
@@ -87,9 +88,13 @@ def main(argv: list[str]) -> int:
     def ensure_classifier():
         nonlocal classifier
         if classifier is None:
-            print("Loading classifier (first time only)...")
-            from classifier import SpeciesClassifier
-            classifier = SpeciesClassifier.load()
+            from classifier import load_classifier
+            remote = os.environ.get("CLASSIFIER_URL")
+            print(
+                "Connecting to remote classifier..." if remote
+                else "Loading classifier (first time only)..."
+            )
+            classifier = load_classifier()
             print(f"Classifier ready on {classifier.device}.\n")
         return classifier
 
@@ -115,7 +120,16 @@ def main(argv: list[str]) -> int:
             common = args[2] if len(args) > 2 else None
         else:
             clf = ensure_classifier()
-            predictions = clf.predict(image_path, top_k=3)
+            try:
+                predictions = clf.predict(image_path, top_k=3)
+            except Exception as err:
+                # Remote API down / timeout / bad image / anything else. Treat the
+                # frame as unidentified so the tour continues: the image is buffered
+                # silently and the ranger stays quiet until asked about it.
+                print(f"\nClassifier error ({type(err).__name__}: {err}).")
+                print("Treating this as an unidentified image. The ranger will wait — ask a question if you'd like them to comment on the scene.\n")
+                session.look_at(image_path)
+                return
             print("Top-3:")
             for p in predictions:
                 tag = f" — {p.common_name}" if p.common_name else ""

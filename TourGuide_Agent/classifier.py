@@ -1,15 +1,26 @@
-"""Inference wrapper for the La Jolla Cove species classifier.
+"""Inference wrappers for the La Jolla Cove species classifier.
 
-Loads the DINOv2-based checkpoint from `species_identification/outputs/` and
-returns top-k scientific-name predictions for an image. Architecture and
-preprocessing match `species_identification/species_identification.ipynb` so
-inference agrees with training.
+Two implementations with the same contract (`Prediction` output shape + a
+`predict(image_path, top_k)` method + a `device` attribute):
+
+- `SpeciesClassifier` — loads the local DINOv2 checkpoint from
+  `species_identification/outputs/best_model.pth` and runs inference on CPU/MPS/CUDA.
+  Architecture and preprocessing match `species_identification.ipynb`.
+- `RemoteSpeciesClassifier` — POSTs the image to a remote HTTP endpoint
+  (typically the Modal deployment in `serving/modal_app.py`) and maps the
+  response back to `Prediction` objects. Common names are still resolved
+  locally from the iNaturalist CSV since the remote endpoint only returns
+  scientific names.
+
+Pick which one to use with `load_classifier()` — set `CLASSIFIER_URL` in the
+environment (or `TourGuide_Agent/.env`) to route to the remote API; leave it
+unset to use the local checkpoint.
 
 Usage:
 
-    from classifier import SpeciesClassifier
+    from classifier import load_classifier
 
-    clf = SpeciesClassifier.load()
+    clf = load_classifier()                 # picks local vs remote from env
     for p in clf.predict("photo.jpg", top_k=3):
         print(f"{p.probability:.1%}  {p.scientific_name}  ({p.common_name})")
 """
@@ -17,6 +28,7 @@ Usage:
 from __future__ import annotations
 
 import csv
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -160,3 +172,87 @@ class SpeciesClassifier:
                 probability=float(prob),
             ))
         return results
+
+
+class RemoteSpeciesClassifier:
+    """HTTP client for a remote classifier (e.g. the Modal deployment).
+
+    Matches the `SpeciesClassifier` contract so it can be dropped in without
+    changing anything in `demo.py` / `TourSession`. The remote endpoint is
+    expected to accept a POST with raw image bytes as the body and `top_k` as
+    a query param, returning `{"predictions": [{"scientific_name": str,
+    "probability": float}, ...]}`.
+
+    Common names are resolved locally from the iNaturalist CSV since the
+    endpoint only returns scientific names.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        common_names: dict[str, str],
+        *,
+        timeout: float = 30.0,
+    ) -> None:
+        self.url = url.rstrip("/")
+        self.common_names = common_names
+        self.timeout = timeout
+        # Displayed by demo.py; kept short so "Classifier ready on ..." stays readable.
+        self.device = f"remote ({self.url})"
+
+    @classmethod
+    def from_url(
+        cls,
+        url: str,
+        csv_path: Path | str = DEFAULT_CSV,
+        *,
+        timeout: float = 30.0,
+    ) -> "RemoteSpeciesClassifier":
+        return cls(
+            url=url,
+            common_names=_load_common_names(Path(csv_path)),
+            timeout=timeout,
+        )
+
+    def predict(self, image_path: Path | str, top_k: int = 3) -> list[Prediction]:
+        # Lazy import so users without `requests` can still use the local classifier.
+        import requests
+
+        image_bytes = Path(image_path).read_bytes()
+        resp = requests.post(
+            self.url,
+            params={"top_k": top_k},
+            data=image_bytes,
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        results: list[Prediction] = []
+        for entry in data.get("predictions", []):
+            sci = entry["scientific_name"]            # space form
+            key = sci.replace(" ", "_")               # underscore form for CSV lookup
+            results.append(Prediction(
+                scientific_name=sci,
+                common_name=self.common_names.get(key),
+                probability=float(entry["probability"]),
+            ))
+        return results
+
+
+def load_classifier(
+    *,
+    url: str | None = None,
+    checkpoint_path: Path | str = DEFAULT_CHECKPOINT,
+    csv_path: Path | str = DEFAULT_CSV,
+) -> SpeciesClassifier | RemoteSpeciesClassifier:
+    """Factory: pick remote vs local based on the `CLASSIFIER_URL` env var.
+
+    Set `CLASSIFIER_URL=https://...modal.run` in `TourGuide_Agent/.env` to
+    route through the Modal deployment. Leave it unset (or empty) to load the
+    local PyTorch checkpoint. The explicit `url` arg overrides the env var.
+    """
+    remote_url = url or os.environ.get("CLASSIFIER_URL") or None
+    if remote_url:
+        return RemoteSpeciesClassifier.from_url(remote_url, csv_path=csv_path)
+    return SpeciesClassifier.load(checkpoint_path=checkpoint_path, csv_path=csv_path)
