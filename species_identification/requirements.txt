@@ -1,0 +1,6 @@
+# CPU-only training environment for the La Jolla Cove classifier.
+# Python 3.10 or 3.11 recommended.
+
+tensorflow>=2.16,<2.20   # Keras 3 is bundled; image_dataset_from_directory + MobileNetV3Small API used above
+numpy>=1.26
+Pillow>=10.0             # image loader backend
