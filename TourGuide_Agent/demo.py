@@ -80,6 +80,7 @@ def main(argv: list[str]) -> int:
             cleaned.append(arg)
 
     voice = _init_voice(voice_requested)
+    print("Detecting location (GPS → IP)...")
     session = TourSession()
     classifier = None
 
@@ -136,7 +137,9 @@ def main(argv: list[str]) -> int:
         print()
         respond(session.see(obs))
 
-    print(f"Ranger at {session.location}, ready. Voice {'ON' if voice else 'off'}.\n")
+    loc = session.location
+    coords = f" ({loc.lat:.4f}, {loc.lon:.4f})" if loc.has_coords else ""
+    print(f"Ranger at {loc.display_name}{coords}, ready. Voice {'ON' if voice else 'off'}.\n")
     print(HELP)
 
     # Optional bootstrap sighting from argv.

@@ -10,31 +10,37 @@ Two entry points:
   shown so far, skips re-narration on repeats (offering to retell instead),
   and can draw connections between current and past species when relevant.
 
-Demo target is La Jolla Cove, so La Jolla is the default location and the
-ranger persona is scoped to that ecosystem.
+The ranger persona is location-general. When a session is created without an
+explicit location, it detects the current place via `location.get_location()`
+(GPS if available, IP-based fallback) and injects the place name + coordinates
+into the model's system context on every turn so narration stays grounded
+wherever the device is being used.
 """
 
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 import anthropic
 
+from location import Location, get_location
 
-DEFAULT_LOCATION = "La Jolla Cove, San Diego, California"
+
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
-RANGER_SYSTEM_PROMPT = """You are a park ranger at La Jolla Cove in San Diego, California — a marine-protected stretch of Pacific coastline inside the San Diego–La Jolla Ecological Reserve, bordered by the Matlahuayl State Marine Reserve. A visitor is walking the cove with a camera and a device that identifies plants and animals. You respond to whatever they show you or ask you.
+RANGER_SYSTEM_PROMPT = """You are a knowledgeable naturalist and tour guide. A visitor is exploring the outdoors with a camera and a device that identifies the plants and animals they point it at. You respond warmly and specifically to whatever they show you or ask you.
+
+The tour's current location, coordinates, date, and season are provided in the session context. Use them: tie your observations to that specific place — its climate, habitat, typical species assemblages, recent natural and human history, and what is happening there at this time of year. If the location is "Unknown location", say so briefly and fall back to general facts about the species without inventing a setting.
 
 How to respond depends on what the visitor does.
 
 NEW SIGHTING — a species they have not shown you yet on this tour. Give a two-part narration, separated by a single blank line. No headings, bullets, or markdown.
-Part 1 (roughly 120–180 words): introduce the species by common name, share a few vivid, specific facts about how it lives (diet, behavior, size, lifespan, distinctive traits), and tie those facts to La Jolla Cove's ecosystem and to what is happening here at this time of year. Speak directly to the visitor ("notice how…"). Ground your observations in the image when you can. Keep it warm and conversational — like a real ranger, not a textbook.
-Part 2 (roughly 40–70 words): specific, concrete threats facing this species and its habitat — warming or acidifying ocean water, plastic and stormwater runoff, human disturbance, habitat loss, fisheries bycatch, disease, invasive competitors, whatever is most relevant here. Relate these to how humans are impacting the ecosystem and species. Be species-specific and place-specific, not generic environmentalism.
+Part 1 (roughly 120–180 words): introduce the species by common name, share a few vivid, specific facts about how it lives (diet, behavior, size, lifespan, distinctive traits), and tie those facts to the current location's ecosystem and to what is happening there at this time of year. Speak directly to the visitor ("notice how…"). Ground your observations in the image when you can. Keep it warm and conversational — like a real ranger, not a textbook.
+Part 2 (roughly 40–70 words): specific, concrete threats facing this species and the habitat where the visitor is standing — e.g. warming or acidifying water, pollution, plastic or stormwater runoff, human disturbance, habitat loss, fisheries bycatch, disease, invasive competitors. Be species-specific and place-specific, not generic environmentalism.
 
 REPEAT SIGHTING — a species already covered earlier on this tour. Do NOT re-narrate. Briefly acknowledge the sighting ("ah, another [common name] — we looked at these earlier") and ask if they would like to hear about it again. Two or three sentences. No Part 2.
 
@@ -42,20 +48,19 @@ QUESTION — free-form text from the visitor, not a sighting. Answer conversatio
 
 YES TO REPEAT — the visitor asks to hear about a species again. Give the full two-part narration, emphasizing different facts than last time.
 
-UNIDENTIFIED IMAGE — a user turn may include one or more images prefixed by a bracketed note that the classifier did not recognize the subject (scenery, an empty view, something outside the 40-species La Jolla catalog). Do NOT invent a species. If the visitor asks about that image, comment briefly on the scene based on what you see, acknowledge that it's not one of our catalogued species, and keep it short and warm — 2 or 3 sentences. If the current message is a new identified sighting, focus on that and ignore the unidentified image unless there's a genuinely relevant connection.
+UNIDENTIFIED IMAGE — a user turn may include one or more images prefixed by a bracketed note that the classifier did not recognize the subject (scenery, an empty view, or something outside the device's catalog for this location). Do NOT invent a species. If the visitor asks about that image, comment briefly on the scene based on what you see, acknowledge that it's not in the catalog, and keep it short and warm — 2 or 3 sentences. If the current message is a new identified sighting, focus on that and ignore the unidentified image unless there's a genuinely relevant connection.
 
-If the identified species seems inconsistent with what is in the image, trust the image, mention the uncertainty briefly in one sentence, and narrate what you actually see. Never invent facts you are not confident about."""
+If the identified species seems geographically implausible for the current location, or inconsistent with what's in the image, trust the image: mention the uncertainty briefly in one sentence, then narrate what you actually see. Never invent facts you are not confident about."""
 
 
 @dataclass
 class Observation:
-    """What the classifier produced, plus when and where it was taken."""
+    """What the classifier produced, plus when it was taken."""
 
     image_path: str | Path
     scientific_name: str
     common_name: str | None = None
     when: datetime | None = None
-    location: str = DEFAULT_LOCATION
 
 
 _MEDIA_TYPES = {
@@ -67,15 +72,30 @@ _MEDIA_TYPES = {
 }
 
 
-def _season(dt: datetime) -> str:
-    m = dt.month
-    if m in (12, 1, 2):
-        return "winter"
-    if m in (3, 4, 5):
-        return "spring"
-    if m in (6, 7, 8):
-        return "summer"
-    return "fall"
+# def _season(dt: datetime, lat: float | None = None) -> str:
+#     """Season at `dt` accounting for hemisphere.
+
+#     Defaults to the northern-hemisphere mapping when latitude is unknown.
+#     Tropical specificity (wet/dry) is left to the model to handle from the
+#     coordinates it also sees.
+#     """
+#     m = dt.month
+#     northern = lat is None or lat >= 0
+#     if northern:
+#         if m in (12, 1, 2):
+#             return "winter"
+#         if m in (3, 4, 5):
+#             return "spring"
+#         if m in (6, 7, 8):
+#             return "summer"
+#         return "fall"
+#     if m in (12, 1, 2):
+#         return "summer"
+#     if m in (3, 4, 5):
+#         return "fall"
+#     if m in (6, 7, 8):
+#         return "winter"
+#     return "spring"
 
 
 def _species_key(scientific_name: str) -> str:
@@ -108,22 +128,35 @@ def _image_block(path: Path) -> dict:
     }
 
 
+def _coerce_location(location: str | Location | None) -> Location:
+    """Normalize the session's location argument into a Location."""
+    if isinstance(location, Location):
+        return location
+    if isinstance(location, str):
+        return Location(display_name=location)
+    return get_location()
+
+
 def narrate(
     observation: Observation,
     *,
+    location: str | Location | None = None,
     model: str = DEFAULT_MODEL,
     client: anthropic.Anthropic | None = None,
 ) -> str:
     """One-shot narration for a single sighting. No memory of prior sightings.
 
-    Use `TourSession` instead for an interactive tour with memory.
+    `location` is detected automatically if omitted. Use `TourSession` for an
+    interactive tour with memory.
     """
     client = client or anthropic.Anthropic()
+    loc = _coerce_location(location)
     when = observation.when or datetime.now()
     common = observation.common_name or "(common name unknown — use your best knowledge of the scientific name)"
+    coords = f" ({loc.lat:.5f}, {loc.lon:.5f})" if loc.has_coords else ""
     user_context = (
-        f"Location: {observation.location}\n"
-        f"Date: {when.strftime('%B %d, %Y')} ({_season(when)})\n"
+        f"Location: {loc.display_name}{coords}\n"
+        f"Date: {when.strftime('%B %d, %Y')} (Spring)\n"
         f"Vision model identified: {observation.scientific_name} — {common}\n\n"
         "New sighting. Give your two-part tour guide narration."
     )
@@ -168,20 +201,22 @@ class TourSession:
     everything discussed so far on this tour.
 
     Location and date are session-level and passed to the model so it can tie
-    facts to season. Message history grows across turns so the agent knows
-    which species have been covered.
+    facts to season. When `location` is omitted the session auto-detects via
+    `location.get_location()` — GPS if available, IP-based fallback otherwise.
+    Message history grows across turns so the agent knows which species have
+    been covered.
     """
 
     def __init__(
         self,
         *,
-        location: str = DEFAULT_LOCATION,
+        location: str | Location | None = None,
         when: datetime | None = None,
         model: str = DEFAULT_MODEL,
         client: anthropic.Anthropic | None = None,
     ) -> None:
         self.client = client or anthropic.Anthropic()
-        self.location = location
+        self.location: Location = _coerce_location(location)
         self.when = when or datetime.now()
         self.model = model
         self.messages: list[dict] = []
@@ -254,14 +289,18 @@ class TourSession:
         note = (
             f"[Earlier I pointed the camera at the {label} above, but our species "
             "classifier didn't recognize the subject — likely scenery or something "
-            "outside our 40-species La Jolla catalog.]"
+            "outside the device's catalog for this location.]"
         )
         return [*images, {"type": "text", "text": note}]
 
     def _tour_context_block(self) -> str:
+        loc = self.location
+        coords = f" (lat {loc.lat:.5f}, lon {loc.lon:.5f})" if loc.has_coords else ""
+        region = f" Region: {loc.region}." if loc.region else ""
+        country = f" Country: {loc.country}." if loc.country else ""
         return (
-            f"Tour info — Location: {self.location}. "
-            f"Date: {self.when.strftime('%B %d, %Y')} ({_season(self.when)})."
+            f"Tour info — Location: {loc.display_name}{coords}.{region}{country} "
+            f"Date: {self.when.strftime('%B %d, %Y')} (Spring)."
         )
 
     def _send(self) -> str:
