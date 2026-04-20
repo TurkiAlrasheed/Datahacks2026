@@ -1,6 +1,12 @@
 # Data files
 *.tflite
 .vscode/
+data/
+data 2/
+images_raw/
+detector/
+observations*.*
+combined_model/data/
 observations-711989/observations-711989.csv
 observations-711989/data.zip
 

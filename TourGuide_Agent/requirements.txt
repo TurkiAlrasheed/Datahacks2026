@@ -14,6 +14,11 @@ soundfile>=0.12
 # Location detection + reverse geocoding (ipapi.co + OSM Nominatim).
 requests>=2.28
 
+# Cloud API server (server.py).
+fastapi>=0.115
+uvicorn>=0.30
+python-multipart>=0.0.9
+
 # Optional — only needed if a GPS module is wired to the Arduino UNO Q over
 # serial (USB/UART). `location.py` imports these lazily and falls back to
 # IP geolocation if they're missing.
