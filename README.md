@@ -24,3 +24,7 @@ ngrok http 8000
 ```bash
 sudo SERVER_URL=https://<ngrok-url> python3 arduino_client.py --camera 2 --mic-device hw:0,0
 ```
+
+### Future plans
+
+power increase + LLM local + slm for self-driving + check SME top floor for designing wheels
