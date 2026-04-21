@@ -1,6 +1,6 @@
 ## RoboRanger
 
-An agent that can identify the various species in the environment and can interact with the user to make ecological sciences more accessible.
+A portable AI agent that can identify the various species in your environment and give you a park ranger style tour guide of your surrounding ecosystem, making ecological sciences more interactive and accessible.
 
 More details: https://devpost.com/software/roboranger?ref_content=my-projects-tab&ref_feature=my_projects
 
