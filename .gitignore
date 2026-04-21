@@ -1,6 +1,7 @@
 # Data files
 *.tflite
 *.keras
+ucsd-data/
 captures/
 _splits/
 .vscode/
