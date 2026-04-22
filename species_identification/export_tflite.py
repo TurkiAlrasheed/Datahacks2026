@@ -23,7 +23,7 @@ from tensorflow.keras import layers
 # ---------------------------------------------------------------------------
 WEIGHTS_PATH  = "outputs/best.keras"       # the trained file
 CLASSES_PATH  = "outputs/class_names.json" # saved during training
-SPLITS_ROOT   = "_splits"                  # or "data" if _splits was deleted
+SPLITS_ROOT   = "cnn/_splits"                  # or "data" if _splits was deleted
 IMG_SIZE      = 224
 DROPOUT       = 0.3
 WEIGHT_DECAY  = 1e-4
