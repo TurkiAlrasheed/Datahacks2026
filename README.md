@@ -25,6 +25,10 @@ ngrok http 8000
 sudo SERVER_URL=https://<ngrok-url> python3 arduino_client.py --camera 2 --mic-device hw:0,0
 ```
 
+### Current setup
+
+MobileNetV3-Large running on Arduino, with web scraping for more images if necessary (found in cnn/web-scraper.py)
+
 ### Future plans
 
 power increase + LLM local + slm for self-driving + check SME top floor for designing wheels

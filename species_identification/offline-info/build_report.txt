@@ -1,0 +1,12 @@
+Built corpus for 50 species.
+
+
+Skipped 1 non-species class(es):
+  - seashore
+
+SHORT: 4 species had < 1000 chars of content.
+These may benefit from supplemental sources:
+  - Paropsis_atomaria (596 chars)
+  - Euphorbia_serpens (696 chars)
+  - Laetiporus_gilbertsonii (907 chars)
+  - Allograpta_obliqua (927 chars)
