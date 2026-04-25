@@ -259,34 +259,72 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
-def chunk_text(text: str, target_words: int = CHUNK_TOKENS,
-               overlap: int = CHUNK_OVERLAP) -> list[str]:
+def _split_sentences(text: str) -> list[str]:
     """
-    Split text into overlapping word-based chunks.
+    Split text into sentences with a simple regex.
 
-    We use word count as a cheap proxy for token count. For English prose and
-    the bge tokenizer, 1 word ≈ 1.3 tokens, so 200 words ≈ 260 tokens. That's
-    still comfortably under bge-small's 512-token limit.
+    Not linguistically perfect (doesn't handle 'Dr. Smith' etc. flawlessly)
+    but good enough for Wikipedia prose and much better than word-based
+    cutting. We preserve paragraph breaks as their own 'sentence' so the
+    rejoined text keeps its structure.
     """
-    # Split on paragraph boundaries first to avoid breaking mid-paragraph
-    # when possible.
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    words: list[str] = []
-    for p in paragraphs:
-        words.extend(p.split())
-        words.append("\n\n")  # paragraph marker
+    # First protect common abbreviations that would cause false splits.
+    # These are the ones that actually show up in species articles.
+    protected = text
+    for abbr in ["Mr.", "Mrs.", "Ms.", "Dr.", "Prof.", "St.", "Mt.",
+                 "e.g.", "i.e.", "etc.", "cf.", "vs.", "approx.",
+                 "subsp.", "var.", "spp.", "sp.", "ca.", "c."]:
+        protected = protected.replace(abbr, abbr.replace(".", "<!DOT!>"))
+
+    # Split on sentence boundaries: . ! ? followed by whitespace + capital
+    # letter, OR paragraph break.
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])|\n\n+", protected)
+    sentences = [p.replace("<!DOT!>", ".").strip() for p in parts if p.strip()]
+    return sentences
+
+
+def chunk_text(text: str, target_words: int = CHUNK_TOKENS,
+               overlap_sentences: int = 2) -> list[str]:
+    """
+    Split text into sentence-aware chunks of approximately target_words.
+
+    Strategy: accumulate whole sentences until adding the next would exceed
+    the target, then emit a chunk. Overlap is the last N sentences of the
+    previous chunk prepended to the next one - this keeps semantic context
+    across boundaries without cutting mid-sentence.
+    """
+    sentences = _split_sentences(text)
+    if not sentences:
+        return []
 
     chunks: list[str] = []
-    i = 0
-    while i < len(words):
-        end = min(i + target_words, len(words))
-        chunk_words = words[i:end]
-        chunk = " ".join(chunk_words).replace(" \n\n ", "\n\n").strip()
-        if len(chunk.split()) >= MIN_CHUNK_WORDS:
-            chunks.append(chunk)
-        if end == len(words):
-            break
-        i = end - overlap
+    current: list[str] = []
+    current_words = 0
+
+    def flush():
+        if current and sum(len(s.split()) for s in current) >= MIN_CHUNK_WORDS:
+            chunks.append(" ".join(current).strip())
+
+    for sent in sentences:
+        sent_words = len(sent.split())
+
+        # If a single sentence alone exceeds the target, emit it as its own
+        # chunk (better than splitting it mid-sentence).
+        if sent_words >= target_words and not current:
+            chunks.append(sent.strip())
+            continue
+
+        # If adding this sentence would overflow, flush and start a new
+        # chunk with the last `overlap_sentences` sentences as preamble.
+        if current_words + sent_words > target_words and current:
+            flush()
+            current = current[-overlap_sentences:] if overlap_sentences > 0 else []
+            current_words = sum(len(s.split()) for s in current)
+
+        current.append(sent)
+        current_words += sent_words
+
+    flush()
     return chunks
 
 

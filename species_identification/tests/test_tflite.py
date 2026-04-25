@@ -15,8 +15,8 @@ import numpy as np
 import tensorflow as tf
 from collections import defaultdict
 
-MODEL_PATH   = "outputs/model_int8.tflite"
-CLASSES_PATH = "outputs/class_names.json"
+MODEL_PATH   = "../outputs/model_int8.tflite"
+CLASSES_PATH = "../outputs/class_names.json"
 IMG_SIZE     = 224
 
 
