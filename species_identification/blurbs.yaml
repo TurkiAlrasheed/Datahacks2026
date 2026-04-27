@@ -1,0 +1,564 @@
+blurbs:
+  Allograpta_obliqua:
+    reviewed: false
+    source: wikipedia:Allograpta obliqua
+    common_name: oblique streaktail hoverfly
+    dangerous_to_humans: no
+    dangerous_to_pets: no
+    diet: adults pollinate, larvae eat aphids - a sap-sucking insect
+    behavior: males have holoptic eyes, females dichoptic
+    notable: larvae are important predators of aphids
+  Apis_mellifera:
+    reviewed: false
+    source: wikipedia:Western honey bee
+    common_name: Western honey bee
+    dangerous_to_humans: no
+    dangerous_to_pets: unknown
+    size: 40,000-80,000 bees per colony
+    appearance: Yellow and brown striped bodies with hairy legs
+    habitat: Every continent except Antarctica; adapted to local environments
+    diet: Nectar, pollen, honey
+    behavior: Eusocial, complex communication through pheromones and waggle dance
+    notable: Important model organism in scientific studies
+  Artemisia_californica:
+    reviewed: false
+    source: wikipedia:Artemisia californica
+    common_name: California sagebrush
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    diet: pollinators, animals (rarely)
+    behavior: provides good cover for smaller birds and other animals; allelopathic, secreting
+      chemicals to inhibit other plants
+    notable: contains terpenes making it aromatic, used in medicine and rituals by indigenous
+      groups
+  Bombus_vosnesenskii:
+    reviewed: false
+    source: wikipedia:Bombus vosnesenskii
+    common_name: Yellow-faced bumblebee
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    diet: nectar, pollen, honey
+    behavior: Overwintering queen establishes underground colonies; workers assist in foraging
+      and incubating brood.
+    notable: Has reduced nesting density in urbanized landscapes due to subterranean nesting
+      habits affected by impervious substances like pavement.
+  Bubo_virginianus:
+    reviewed: false
+    source: wikipedia:Great horned owl
+    common_name: Great horned owl
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    diet: rabbits, hares, rats, mice, voles, skunk, rodents, larger mammals, birds, reptiles,
+      amphibians, invertebrates
+    behavior: nocturnal, solitary
+  Buteo_lineatus:
+    reviewed: false
+    source: wikipedia:Red-shouldered hawk
+    common_name: Red-shouldered hawk
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    diet: small mammals, birds, reptiles, amphibians
+    behavior: permanently resident in most of its range; northern birds migrate to central
+      Mexico
+    notable: main conservation threat is deforestation
+  Calypte_anna:
+    reviewed: false
+    source: wikipedia:Anna's hummingbird
+    common_name: Anna's hummingbird
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    size: 9.9-10.9 cm body length, wingspan 12 cm
+    appearance: Iridescent bronze-green back, pale grey chest and belly, green flanks; male
+      has iridescent crimson-red crown and gorget.
+    habitat: Western coastal regions of North America, including residential areas, parks,
+      and backyards with feeders and flowering plants.
+    diet: Nectar from flowers, small insects, other arthropods
+    behavior: Adapted to urban environments; eats flying insects; male's call is scratchy
+      and metallic.
+    notable: Male has the only red crown among North American hummingbird species.
+  Canis_latrans:
+    reviewed: false
+    source: wikipedia:Coyote
+    common_name: Coyote
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'yes'
+    size: 8-20 kg (18-44 lb) body weight, 1.0-1.35 m (3 ft 3 in - 4 ft 5 in) total length
+    appearance: Light gray and red or fulvous fur, interspersed with black and white; short,
+      soft underfur and long, coarse guard hairs.
+    habitat: Open plains and arid regions of North America, adaptable to urban environments
+    diet: Primarily carnivorous, eating deer, rabbits, hares, rodents, birds, reptiles, amphibians,
+      fish, and invertebrates
+    behavior: Highly flexible social organization; primarily nocturnal, with a characteristic
+      howl that changes rapidly in tone and pitch
+    notable: Genetic studies show that most North American wolves contain some level of coyote
+      DNA
+  Corvus_corax:
+    reviewed: false
+    source: wikipedia:Common raven
+    common_name: Common raven
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    size: 63-65 cm length, 1.47 kg weight
+    appearance: All-black passerine bird with little variation in appearance.
+    habitat: Found across the Northern Hemisphere; common in various habitats including forests
+      and tundras.
+    diet: Omnivorous diet including carrion, insects, cereal grains, berries, fruit, small
+      animals, nesting birds, and food waste
+    behavior: Mate for life; defend territory with mated pair. Young birds may travel in flocks.
+    notable: Considered unusually intelligent with notable feats of problem-solving.
+  Cotinis_mutabilis:
+    reviewed: false
+    source: wikipedia:Figeater beetle
+    common_name: Figeater beetle
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    diet: fruit, nectar, pollen, sap; larvae eat decomposing organic matter
+    behavior: active during daylight hours, congregates in shade to find mates
+    notable: can swarm on soft or damaged fruit and eat entire crop
+  Cycloneda_sanguinea:
+    reviewed: false
+    source: wikipedia:Cycloneda sanguinea
+    common_name: spotless lady beetle
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    size: 4-6.5 mm long, elytra (wing covers)
+    appearance: red, unspotted elytra; white and black marks on head and pronotum are gender-specific
+    habitat: plant-dense landscapes in Americas, from southern US to Argentina, eastward to
+      Cayman Islands
+    diet: aphids, milkweeds, other plants
+    behavior: nocturnal behavior not mentioned; pupae have gin trap mechanism for predator
+      defense
+    notable: pupae can 'bite' predators using a device known as a 'gin trap'
+  Danaus_plexippus:
+    reviewed: false
+    source: wikipedia:Monarch butterfly
+    common_name: Monarch butterfly
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    size: 8.9-10.2 cm wingspan
+    appearance: black, orange, and white pattern
+    habitat: North America to northern South America; worldwide including Hawaii, Australia,
+      New Zealand, Spain, and Pacific Islands
+    diet: nectar from flowers
+    behavior: migrates thousands of miles annually
+    notable: annual southward migration from northern and central United States to Florida
+      and Mexico
+  Dione_vanillae:
+    reviewed: false
+    source: wikipedia:Gulf fritillary
+    common_name: Gulf fritillary
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    size: 6.5-9.5 cm wingspan
+    appearance: Deep orange with black streaks, underside brown and speckled with silvery
+      white dots.
+    habitat: Open habitats, moderately sunny areas near open grasslands, parks, woodlands,
+      butterfly gardens.
+    diet: Nectar from flowers, including Lantana plants
+    behavior: Female lays eggs on host plant, male emits sex pheromones for mate choice
+    notable: Has a chemical defense mechanism to deter predators
+  Diplacus_puniceus:
+    reviewed: false
+    source: wikipedia:Diplacus puniceus
+    common_name: red bush monkeyflower
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 24-36 in tall, 60-90 cm wide
+    appearance: dark orange to red flowers; glabrous, uniformly green leaves
+    habitat: coastal regions of Southern California and Baja California; granite outcrops,
+      chaparral openings, disturbed areas
+    diet: none (plant)
+    behavior: none noted
+    notable: hybridizes with Diplacus ×australis
+  Encelia_californica:
+    reviewed: false
+    source: wikipedia:Encelia californica
+    common_name: California coast sunflower
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 50-150 cm height
+    appearance: Bushy shrub with green, rounded diamond leaves and bright yellow ray florets
+      around a center of protruding yellowish to purplish brown disc florets.
+    habitat: Southern California; coastal sage plant community at shoreline, chaparral and
+      woodlands on inland foothills in Transverse and Peninsular Ranges
+    diet: Attracts butterflies, bees, and other insects
+    notable: Host plant for the larvae of the Bay checkerspot butterfly
+  Eriogonum_fasciculatum:
+    reviewed: false
+    source: wikipedia:Eriogonum fasciculatum
+    common_name: California buckwheat
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    diet: nectar, seeds
+    behavior: attracts pollinators, nectar food plant for butterflies
+    notable: most important native source of honey in California
+  Euphorbia_maculata:
+    reviewed: false
+    source: wikipedia:Euphorbia maculata
+    common_name: Spotted Spurge
+    dangerous_to_humans: mild
+    dangerous_to_pets: unknown
+    diet: photosynthetic
+    behavior: grows in sunny locations, spreads out in a mat along the ground
+    notable: contains triterpenoids with anti-inflammatory and anti-proliferative properties
+      when medicinally applied
+  Euphorbia_peplus:
+    reviewed: false
+    source: wikipedia:Euphorbia peplus
+    common_name: petty spurge
+    dangerous_to_humans: 'yes'
+    dangerous_to_pets: unknown
+    diet: no information available
+    notable: has been linked to the virtual elimination of squamous cell skin cancer in Germany
+      studies, and has approval from US FDA for treatment of actinic keratosis as a gel containing
+      ingenol mebutate
+  Euphorbia_serpens:
+    reviewed: false
+    source: wikipedia:Euphorbia serpens
+    common_name: matted sandmat
+    dangerous_to_humans: unknown
+    dangerous_to_pets: unknown
+  Haemorhous_mexicanus:
+    reviewed: false
+    source: wikipedia:House finch
+    common_name: House finch
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    size: 12.5-15 cm long, with a wingspan of 20-25 cm (5-6 in and 8-10 in)
+    appearance: Brown or dull-brown color across the back with some shading into deep gray
+      on the wing feathers; reddish heads, necks and shoulders in males
+    habitat: Urban and suburban areas across North America, as well as various semi-open areas
+      in the west from southern Canada to the Mexican state of Oaxaca
+    diet: Grains, seeds, berries, weed seeds (nettle and dandelion), small insects (aphids)
+    behavior: Forage on the ground or in vegetation; frequent visitors to bird feeders throughout
+      the year
+    notable: Estimated 40 million individuals across North America
+  Harmonia_axyridis:
+    reviewed: false
+    source: wikipedia:Harmonia axyridis
+    common_name: Harlequin
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 5.5-8.5mm in length
+    appearance: Typical coccinellid beetle, domed with smooth transition between elytra, pronotum,
+      and head. Common color form is orange or red with black spots.
+    habitat: Native to eastern Asia; introduced to North America, Europe, Africa, and South
+      America in greenhouses, crop fields, and gardens.
+    diet: Aphids and scale insects
+    behavior: Voracious predator; reddish-brown legs and brown underside of abdomen
+    notable: Has been used as a biocontrol agent to control aphid populations
+  Heteromeles_arbutifolia:
+    reviewed: false
+    source: wikipedia:Heteromeles
+    common_name: Toyon
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    diet: birds, mammals (including coyotes and bears)
+    behavior: visited by butterflies; produces small white flowers in dense terminal corymbs
+    notable: contains a small amount of cyanogenic glycosides, which break down into hydrocyanic
+      acid on digestion
+  Hylephila_phyleus:
+    reviewed: false
+    source: wikipedia:Fiery skipper
+    common_name: Fiery Skipper
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    size: 1-2.5 cm body length
+    appearance: Male orange or yellow, female dark brown with pale checkered markings. Small
+      brown spots on hindwing and forewing.
+    habitat: North and South America, from Canada to Argentina; urban settings, turfgrass,
+      Bermuda grass
+    diet: Turfgrass, including Bermudagrass, creeping bentgrass, St. Augustine grass
+    behavior: Rapid flyers with darting movements; hold wings in a 'triangle' shape to absorb
+      sun's rays
+    notable: Larvae can feed on multiple types of turfgrass and are considered pests in California
+      and Hawaii
+  Hyles_lineata:
+    reviewed: false
+    source: wikipedia:Hyles lineata
+    common_name: white-lined sphinx
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 2-3 inch wingspan, 2-3 inches body length
+    appearance: Forewing dark brown with tan stripe and white lines. Black hindwing with pink
+      median band.
+    habitat: Deserts, gardens, suburbs; mountains of Colorado
+    diet: Adults feed on nectar from flowers; caterpillars eat host plants
+    behavior: Nocturnal, but also fly during day; prefer flying at dusk and dawn
+    notable: Caterpillars can form massive groupings damaging crops and gardens
+  Junco_hyemalis:
+    reviewed: false
+    source: wikipedia:Dark-eyed junco
+    common_name: Dark-eyed junco
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 5-8 cm body length
+    appearance: dark gray head, breast and upperparts; white wing bars in some subspecies
+    habitat: boreal forests from Alaska to Newfoundland and south to the Appalachian Mountains;
+      wintering throughout most of the United States
+    diet: small insects, seeds, and fruits
+    behavior: breeds in North American boreal forests; winters in a wide range of habitats
+    notable: variable species with many subspecies
+  Laetiporus_gilbertsonii:
+    reviewed: false
+    source: wikipedia:Laetiporus gilbertsonii
+    dangerous_to_humans: unknown
+    dangerous_to_pets: unknown
+    diet: edible, hardwood stumps and logs
+    notable: named after mycologist Robert Lee Gilbertson
+  Leiothlypis_celata:
+    reviewed: false
+    source: wikipedia:Orange-crowned warbler
+    common_name: Orange-crowned Warbler
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: small songbird
+    appearance: olive-grey upperparts, yellowish underparts with faint streaking and a thin
+      pointed bill
+    habitat: open shrubby areas across Canada, Alaska and the western United States; migrates
+      to southern United States and Central America in winter
+    diet: insects, berries and nectar
+    behavior: lack of wing bars, strong face marking or bright colouring; builds nest on ground
+      under vegetation or low in shrubs
+  Marah_macrocarpa:
+    reviewed: false
+    source: wikipedia:Marah macrocarpa
+    common_name: wild cucumber
+    dangerous_to_humans: unknown
+    dangerous_to_pets: unknown
+    diet: none specified
+    notable: All parts of the plant are toxic, as it contains cucurbitacins and ribosome-inactivating
+      proteins.
+  Melospiza_melodia:
+    reviewed: false
+    source: wikipedia:Song sparrow
+    common_name: Song sparrow
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 11-18 cm body length, wingspan 18-25.4 cm
+    appearance: Brown upperparts with dark streaks, white underneath with dark streaking and
+      a dark brown spot on the breast.
+    habitat: Brushland, marshes, salt marshes, suburbs, agricultural fields, roadsides, across
+      most of Canada and the United States.
+    diet: Insects, seeds, small crustaceans
+    behavior: Forages on the ground, in shrubs or very shallow water; nests in sheltered locations
+      on the ground or in trees/shrubs
+    notable: Has a highly variable size across numerous subspecies
+  Nymphalis_antiopa:
+    reviewed: false
+    source: wikipedia:Nymphalis antiopa
+    common_name: Mourning Cloak
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 2-3 inches body length (pupa)
+    appearance: Black bodies with reddish-orange dots, black spines and white dots on caterpillars;
+      tan or brown gray pupae with red-tipped spikes.
+    habitat: Hardwood forests in northern hemisphere, cold mountainous areas
+    diet: Unknown
+    behavior: Migrates to Britain during summer and autumn, thought to hibernate in timber
+      stacks
+    notable: One of the longest lifespans for any butterfly, with a lifespan of 11-12 months
+  Omphalotus_olivascens:
+    reviewed: false
+    source: wikipedia:Omphalotus olivascens
+    common_name: Western jack-o'-lantern mushroom
+    dangerous_to_humans: 'yes'
+    dangerous_to_pets: 'yes'
+  Otospermophilus_beecheyi:
+    reviewed: false
+    source: wikipedia:California ground squirrel
+    common_name: California ground squirrel
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    diet: seeds, grains, nuts, fruits, insects, roots
+    behavior: hibernate in colder parts of range; active year-round in warmer areas; estivate
+      for short periods during hot summers
+    notable: can live up to six years
+  Oxalis_pes-caprae:
+    reviewed: false
+    source: wikipedia:Oxalis pes-caprae
+    common_name: African wood-sorrel
+    dangerous_to_humans: unknown
+    dangerous_to_pets: 'yes'
+  Papilio_rutulus:
+    reviewed: false
+    source: wikipedia:Papilio rutulus
+    common_name: Western Tiger Swallowtail
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 7-10 cm wingspan
+    appearance: Brightly colored, yellow with black stripes and blue and orange spots near
+      tail.
+    habitat: Urban parks and gardens, rural woodlands, riparian areas in Western North America.
+    diet: Leaves of various trees, including cottonwood, willow, quaking aspen
+    behavior: Active butterflies, rarely seen at rest; males congregate near water to drink
+      and extract minerals.
+    notable: Can tolerate cold winters as diapausing pupae, frequently surviving beneath snow.
+  Paropsis_atomaria:
+    reviewed: false
+    source: wikipedia:Paropsis atomaria
+    common_name: Speckled leaf beetle
+    dangerous_to_humans: unknown
+    dangerous_to_pets: unknown
+  Procyon_lotor:
+    reviewed: false
+    source: wikipedia:Raccoon
+    common_name: Raccoon
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'yes'
+    diet: omnivorous, eating invertebrates, plants, and vertebrates
+    behavior: usually nocturnal, engages in sex-specific social behavior
+    notable: can remember solution to tasks for at least three years
+  Quercus_agrifolia:
+    reviewed: false
+    source: wikipedia:Quercus agrifolia
+    common_name: California live oak
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    diet: acorns, leaves
+    behavior: evergreen, drought-tolerant
+    notable: can live up to 1,000 years old
+  Rhus_integrifolia:
+    reviewed: false
+    source: wikipedia:Rhus integrifolia
+    common_name: lemonade sumac
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    diet: fruits, possibly nectar and leaves
+    behavior: evergreen, tolerates heat and windy conditions; bird species disperse its fruits
+    notable: leaves can be used as a brown dye or mordant; oil extracted from seeds can be
+      used to manufacture candles
+  Salvia_mellifera:
+    reviewed: false
+    source: wikipedia:Salvia mellifera
+    common_name: Californian black sage
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    diet: nectar, insects
+    behavior: evergreen shrub, semi-deciduous depending on drought
+    notable: produces a rare and prized honey due to its dry climate
+  Sayornis_nigricans:
+    reviewed: false
+    source: wikipedia:Black phoebe
+    common_name: Black Phoebe
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 16 cm (6.3 in) length, weighing 15 to 22 g (0.5 to 0.8 oz)
+    appearance: Predominantly black plumage with white on belly and undertail coverts; brown
+      feather tips and wing-bars on juveniles.
+    habitat: Near water; coastal cliffs, river/lake banks, park fountains
+    diet: Mainly insectivorous
+    behavior: Tail-wagging motion; direct flight with steady wing beats
+    notable: Makes an open cup nest cemented in place with mud
+  Sceloporus_occidentalis:
+    reviewed: false
+    source: wikipedia:Western fence lizard
+    common_name: Western fence lizard
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    diet: insects, small invertebrates
+    behavior: diurnal, often seen on fences or in yards
+    notable: has bright blue belly and black stripes on back; males have blue patches on throats
+      and iridescent spots on dorsal surface
+  Schistocerca_nitens:
+    reviewed: false
+    source: wikipedia:Schistocerca nitens
+    common_name: Gray Bird Grasshopper
+    dangerous_to_humans: unknown
+    dangerous_to_pets: unknown
+    diet: ornamental plants, crop plants
+    behavior: solitary, but can reach swarm proportions in favorable environments
+    notable: Introduced to Hawaii several decades ago and caused significant damage to vegetation
+      on the island of Nīhoa in 2004
+  Sialia_mexicana:
+    reviewed: false
+    source: wikipedia:Western bluebird
+    common_name: Western bluebird
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    diet: insects, berries
+    behavior: pounces on ground for food; flies to catch aerial prey
+    notable: 45% of nests carried young not offspring of male partner
+  Sisyrinchium_bellum:
+    reviewed: false
+    source: wikipedia:Sisyrinchium bellum
+    common_name: western blue-eyed grass
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    diet: unknown
+    notable: The Ohlone used an infusion of its roots and leaves as a cure for indigestion
+      and stomach pain.
+  Spinus_psaltria:
+    reviewed: false
+    source: wikipedia:Lesser goldfinch
+    common_name: Lesser Goldfinch
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 9-12 cm length, 8-11.5 g weight
+    appearance: 'Males: bright yellow underparts, big white patches in tail and wings; black
+      back to upper head or medium green.'
+    habitat: North America, from western USA to south-central Mexico, including coastal scrub
+      and chaparral.
+    diet: Seeds, insects
+    behavior: Undulating flight, harsh chig chig chig call, high-pitched whistle teeeyeee
+      or teeeyooo
+    notable: Smallest North American Spinus finch
+  Steatoda_nobilis:
+    reviewed: false
+    source: wikipedia:Steatoda nobilis
+    common_name: Noble False Widow
+    dangerous_to_humans: mild
+    dangerous_to_pets: 'yes'
+    size: 9.5-14 mm body length (females), 7-11 mm (males)
+    appearance: Brown bulbous abdomen with cream coloured markings, reddish-orange legs.
+    habitat: Year-round in various habitats, including cacti, roadside cuttings, demolished
+      buildings, urban environments, and temperate climates.
+    diet: Insects, spiders, small vertebrates
+    behavior: Uses 'attack wrap' strategy to immobilize prey; venom induces paralysis.
+    notable: Considered one of the world's most invasive species of spider.
+  Sylvilagus_audubonii:
+    reviewed: false
+    source: wikipedia:Desert cottontail
+    common_name: Desert cottontail
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: unknown
+    size: 36-42 cm long, 700-1,200 g weight
+    appearance: Greyish-brown fur, rounded tail with white edge and underside, white belly,
+      large ears carried erect
+    habitat: Dry near-desert grasslands of the American southwest, pinyon-juniper forest,
+      riparian zones in arid regions
+    diet: 90% grass, leaves, peas, mesquite bark, fallen fruit, prickly pear pads, shrub twigs
+    behavior: Nocturnal, solitary, coprophagic (re-ingests feces to extract nutrients)
+    notable: 'Short lifespan: less than two years in the wild'
+  Trifolium_repens:
+    reviewed: false
+    source: wikipedia:Trifolium repens
+    common_name: White Clover
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    diet: herbivorous, fixes nitrogen from air
+    notable: Used as a model organism for global research into ecology and urban evolution
+  Tyrannus_vociferans:
+    reviewed: false
+    source: wikipedia:Cassin's kingbird
+    common_name: Cassin's kingbird
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 21-23 cm length, 41 cm wingspan
+    appearance: Gray head with darker cheeks; dark tail with buffy fringe and gray-olive underparts.
+      Pale throat and deep yellow lower breast.
+    habitat: Rangelands and savannas in western North America, summering from California to
+      Utah, wintering in southern Central America and Mexico.
+    diet: Insects, berries, fruits
+    behavior: Builds bulky nest on tree limb; hawks insects from high perches; pumps tail
+      up and down while perched to deter predators.
+    notable: Specific epithet vociferans means 'shouting' in Latin.
+  Zenaida_macroura:
+    reviewed: false
+    source: wikipedia:Mourning dove
+    common_name: Mourning dove
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    diet: almost exclusively seeds
+    behavior: generally monogamous, both parents incubate and care for young
+    notable: can raise up to six broods of two young each in a single year
