@@ -29,6 +29,8 @@ sudo SERVER_URL=https://<ngrok-url> python3 arduino_client.py --camera 2 --mic-d
 
 MobileNetV3-Large running on Arduino, with web scraping for more images if necessary (found in cnn/web-scraper.py)
 
+must run build corpus before compile blurbs, because it tries to find the existing DB to add to it
+
 ### Future plans
 
 power increase + LLM local + slm for self-driving + check SME top floor for designing wheels
