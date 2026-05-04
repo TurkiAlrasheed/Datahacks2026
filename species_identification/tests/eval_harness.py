@@ -55,7 +55,7 @@ from sentence_transformers import SentenceTransformer
 from test_corpus import EMBED_MODEL, open_db, retrieve, l2_to_cosine
 
 
-DEFAULT_THRESHOLD = 0.65  # placeholder; the whole point is to TUNE this
+DEFAULT_THRESHOLD = 0.5  # placeholder; the whole point is to TUNE this
 
 
 def load_eval_set(path: Path) -> list[dict]:
