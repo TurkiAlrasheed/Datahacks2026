@@ -3,8 +3,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Allograpta obliqua
     common_name: oblique streaktail hoverfly
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 6-9 mm body length
     apprearance: black and yellow striped abdomen and thorax, clear wings with dark veins, large compound eyes
     habitat: gardens, meadows, agricultural fields across North America
@@ -15,8 +15,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Western honey bee
     common_name: Western honey bee
-    dangerous_to_humans: mild
-    dangerous_to_pets: mild
+    dangerous_to_humans: "mild"
+    dangerous_to_pets: "mild"
     size: 12-20 mm body length, 10-20 mm wingspan
     appearance: Dark brown striped bodies with hairy legs
     habitat: Every continent except Antarctica; adapted to local environments
@@ -27,8 +27,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Artemisia californica
     common_name: California sagebrush
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 1-2 m tall, 1-2 m wide
     appearance: slender, flexible, gray-green fuzzy stems with a fragrant smell 
     habitat: coastal sage scrub, chaparral, and dry foothill communities in western and Baja California
@@ -41,8 +41,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Bombus vosnesenskii
     common_name: Yellow-faced bumblebee
-    dangerous_to_humans: mild
-    dangerous_to_pets: mild
+    dangerous_to_humans: "mild"
+    dangerous_to_pets: "mild"
     size: 8-21 mm body length
     appearance: Black body with yellow face and thorax; short, even hair, and a square face
     habitat: coastal areas and meadows in western North America, from British Columbia to California
@@ -54,8 +54,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Great horned owl
     common_name: Great horned owl
-    dangerous_to_humans: no
-    dangerous_to_pets: yes
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "yes"
     size: 43-64 cm length, 91-153 cm wingspan, 1-2.5 kg weight
     appearance: large, mottled gray-brown owl with prominent ear tufts. yellow eyes, and a white patch on the throat
     habitat: wide range of habitats across the Americas, including forests, deserts, swamps, and urban areas
@@ -67,8 +67,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Red-shouldered hawk
     common_name: Red-shouldered hawk
-    dangerous_to_humans: no
-    dangerous_to_pets: yes
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "yes"
     size: 43-61 cm length, 90-127 cm wingspan, 0.5-1 kg weight
     appearance: reddish-brown underparts, dark and white checkered back and wings,
       long tail with narrow white bands
@@ -81,8 +81,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Anna's hummingbird
     common_name: Anna's hummingbird
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 9.9-10.9 cm body length, 12 cm wingspan, 3-6 g weight
     appearance: Iridescent bronze-green back, pale grey chest and belly, emerald-green feathers; male
       has iridescent crimson-red crown and gorget.
@@ -95,8 +95,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Coyote
     common_name: Coyote
-    dangerous_to_humans: yes 
-    dangerous_to_pets: yes
+    dangerous_to_humans: "yes"
+    dangerous_to_pets: "yes"
     size: 8-23 kg body weight, 1.0-1.35 m total length, 0.6 m standing height
     appearance: Light gray and red or dull-orange fur, interspersed with black and white; short,
       soft underfur and long, coarse guard hairs; bushy, black-tipped tail
@@ -111,8 +111,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Common raven
     common_name: Common raven
-    dangerous_to_humans: no
-    dangerous_to_pets: yes
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "yes"
     size: 54-69 cm length, 115-150 cm wingspan, 0.7-1.63 kg weight
     appearance: All-black passerine bird with little variation in appearance; heavy, curved beak, shaggy throat feathers;
       larger than a crow, with a more robust bill and wedge-shaped tail
@@ -127,8 +127,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Figeater beetle
     common_name: Figeater beetle
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 17-34 mm long, 10-19 mm wide, has elytra (wing covers)
     appearance: Velvety, metallic-green back with yellowish or tan margins along the wing covers.
     habitat: southwestern US and Mexico; warm, sunny areas like gardens, orchards, and urban landscapes
@@ -141,8 +141,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Cycloneda sanguinea
     common_name: spotless lady beetle
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 4-6.5 mm long, elytra (wing covers)
     appearance: red, unspotted elytra; white and black marks on the head and pronotum
     habitat: plant-dense landscapes in Americas, from southern US to Argentina, eastward to
@@ -156,8 +156,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Monarch butterfly
     common_name: Monarch butterfly
-    dangerous_to_humans: no
-    dangerous_to_pets: yes
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "yes"
     size: 7-12 cm long, 2.5-3.5 cm wingspan
     appearance: vibrant orange wings, bold black veins, and a thick black border filled with small white spots
     habitat: open, sunny areas across North America, like  meadows, grasslands, or urban gardens; worldwide in places
@@ -170,8 +170,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Gulf fritillary
     common_name: Gulf fritillary or Passion butterfly
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 2-3 cm long, 6.5-9.5 cm wingspan
     appearance: intense, bright orange with black streaks and spots, underside brown and speckled with silvery
       white dots.
@@ -185,8 +185,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Diplacus puniceus
     common_name: red bush monkeyflower
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 30-100 cm tall, 60-100 cm wide
     appearance: tubular dark orange to red flowers; narrow, lance-shaped (linear), shiny, dark-green leaves
     habitat: coastal regions of Southern California and Baja California; granite outcrops,
@@ -198,8 +198,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Encelia californica
     common_name: California coast or bush sunflower
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 60-150 cm tall, 90-200 cm wide  
     appearance: Bushy shrub with green, rounded diamond leaves and bright yellow ray florets
       around a center of protruding yellowish to purplish brown disc florets.
@@ -212,8 +212,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Eriogonum fasciculatum
     common_name: California buckwheat
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 0.3-1.8 m tall, 0.3-2.5 m wide
     appearance: small, leathery, needle-like green leaves with woolly undersides that are clustered on stems with 
       dense clusters of white-to-pink flowers that dry to a rusty-red
@@ -224,8 +224,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Euphorbia maculata
     common_name: Spotted Spurge
-    dangerous_to_humans: yes
-    dangerous_to_pets: yes
+    dangerous_to_humans: "yes"
+    dangerous_to_pets: "yes"
     size: 1-10 cm tall, 10-100 cm wide
     appearance: low-growing, prostrate annual weed that forms dense mats; thin, branching, and often reddish or maroon stems that stay 
       close to the ground but spread radially, with oblong, dark green leaves.
@@ -237,8 +237,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Euphorbia peplus
     common_name: petty spurge
-    dangerous_to_humans: yes
-    dangerous_to_pets: yes
+    dangerous_to_humans: "yes"
+    dangerous_to_pets: "yes"
     size: 5-30 cm tall, 20 cm wide
     appearance: small, erect annual herb; erect, smooth, often reddish-green stems the base, with leaves that are
       oval-shaped with rounded tips and smooth edges
@@ -251,8 +251,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Euphorbia serpens
     common_name: matted sandmat
-    dangerous_to_humans: yes
-    dangerous_to_pets: yes
+    dangerous_to_humans: "yes"
+    dangerous_to_pets: "yes"
     size: 2-5 cm tall, 30-60 cm wide
     appearance: prostrate, mat-forming annual herb with smooth, reddish-green stems; leaves are light green to 
       yellowish-green on top and pale grayish-green underneath oposite, simple, and broadly oval to oblong
@@ -263,8 +263,8 @@ blurbs:
     reviewed: true
     source: wikipedia:House finch
     common_name: House finch
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 12.5-15 cm long, with a wingspan of 20-25 cm (5-6 in and 8-10 in)
     appearance: Brown or dull-brown color across the back with some shading into deep gray
       on the wing feathers; reddish heads, necks and shoulders in males
@@ -278,8 +278,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Harmonia axyridis
     common_name: Harlequin or Asian lady beetle
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 5.5-8.5mm in length
     appearance: Typical coccinellid beetle, domed with smooth transition between elytra, pronotum,
       and head. Common color form is orange or red with black spots.
@@ -292,8 +292,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Heteromeles
     common_name: Toyon
-    dangerous_to_humans: yes (if ingested in large quantities)
-    dangerous_to_pets: yes (if ingested in large quantities)
+    dangerous_to_humans: "yes"
+    dangerous_to_pets: "yes"
     size: 2-5 m tall, 2-4 m wide
     appearance: evergreen shrub with leathery, serrated leaves and clusters of small white flowers that develop into bright red berries
     habitat: oak woodland, coastal scrub, and chaparral habitats in California and Baja California
@@ -305,8 +305,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Fiery skipper
     common_name: Fiery Skipper
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 1-2.5 cm body length
     appearance: Male orange or yellow, female dark brown with pale checkered markings. Small
       brown spots on hindwing and forewing.
@@ -321,8 +321,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Hyles lineata
     common_name: white-lined sphinx
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 2-3 inch wingspan, 2-3 inches body length
     appearance: Forewing dark brown with tan stripe and white lines. Black hindwing with pink
       median band.
@@ -334,8 +334,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Dark-eyed junco
     common_name: Dark-eyed junco
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 5-8 cm body length
     appearance: dark gray head, breast and upperparts; white wing bars in some subspecies
     habitat: boreal forests from Alaska to Newfoundland and south to the Appalachian Mountains;
@@ -346,8 +346,8 @@ blurbs:
   Laetiporus_gilbertsonii:
     reviewed: true
     source: wikipedia:Laetiporus gilbertsonii
-    dangerous_to_humans: mild
-    dangerous_to_pets: yes
+    dangerous_to_humans: "mild"
+    dangerous_to_pets: "yes"
     size: 10-40 cm wide, 1-3 cm thick
     appearance: bright orange to salmon pink, with a soft, spongy texture; grows in large, overlapping 
       clusters on tree trunks and branches
@@ -360,8 +360,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Orange-crowned warbler
     common_name: Orange-crowned Warbler
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 12-14 cm body length, 20-25 cm wingspan
     appearance: olive-grey upperparts, yellowish underparts with faint streaking and a thin
       pointed bill
@@ -375,8 +375,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Marah macrocarpa
     common_name: wild cucumber
-    dangerous_to_humans: yes
-    dangerous_to_pets: yes
+    dangerous_to_humans: "yes"
+    dangerous_to_pets: "yes"
     size: 1-8 m long vine, 5-20 cm long and 5-6 cm diameter fruit
     appearance: 5-7 lobed green leaves, spiraling tendrils, and small, yellowish-green to white, fragrant flowers 
       that appear in early spring with high-climbing or sprawling, hairy stems that form a net over shrubs in late winter
@@ -388,8 +388,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Song sparrow
     common_name: Song sparrow
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 11-18 cm body length, wingspan 18-25.4 cm
     appearance: Brown upperparts with dark streaks, white underneath with dark streaking and
       a dark brown spot on the breast.
@@ -404,8 +404,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Nymphalis antiopa
     common_name: Mourning Cloak
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 2-3 inches body length (pupa)
     appearance: Black bodies with reddish-orange dots, black spines and white dots on caterpillars;
       tan or brown gray pupae with red-tipped spikes.
@@ -418,8 +418,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Omphalotus olivascens
     common_name: Western jack-o'-lantern mushroom
-    dangerous_to_humans: yes
-    dangerous_to_pets: yes
+    dangerous_to_humans: "yes"
+    dangerous_to_pets: "yes"
     size: 5-20 cm wide, 3-10 cm tall, 1-4 cm thick
     appearance: a clustered, orange-to-olive-brown fungus with a convex cap that becomes funnel-shaped with age; true, decurrent 
       gills (running down the stem) that glow with a faint green light in the dark
@@ -431,8 +431,8 @@ blurbs:
     reviewed: true
     source: wikipedia:California ground squirrel
     common_name: California ground squirrel
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 35-50 cm body length, 13-23 cm tail length, 280-740 g weight
     appearance: grayish-brown fur with white speckles, bushy tail, and a white ring around each eye
     diet: seeds, grains, nuts, fruits, insects, roots
@@ -444,8 +444,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Oxalis pes-caprae
     common_name: African wood-sorrel or Bermuda buttercup
-    dangerous_to_humans: mild
-    dangerous_to_pets: yes
+    dangerous_to_humans: "mild"
+    dangerous_to_pets: "yes"
     size: 12-45 cm tall, 20-50 cm wide
     appearance: bright yellow, five-petaled flowers with clover-like leaves with occasional distinct purplish or brown dots
     habitat: native to South Africa; invasive in Mediterranean climates worldwide, including California
@@ -456,8 +456,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Papilio rutulus
     common_name: Western Tiger Swallowtail
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 4-5.5 cm body length, 7-10 cm wingspan
     appearance: Brightly colored, yellow with black stripes and blue and orange spots near
       tail.
@@ -471,8 +471,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Paropsis atomaria
     common_name: Speckled leaf beetle
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 8-14 mm long, 4-5 mm wide
     appearance: Distinctive dome-shaped, oval, and robust light brown, tan, or pale pink-orange body,
       speckled with orange dots and faint black spots
@@ -484,8 +484,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Raccoon
     common_name: Raccoon
-    dangerous_to_humans: yes (by disease)
-    dangerous_to_pets: yes
+    dangerous_to_humans: "yes"
+    dangerous_to_pets: "yes"
     size: 40-70 cm body length, 19-40 cm tail length, 2-10 kg weight
     appearance: grayish-brown fur with a distinctive black "mask" around the eyes and a bushy, ringed tail, extremely dexterous front paws
     diet: omnivorous, a mix of plants (berries, nuts, fruits, corn), invertebrates (crayfish, insects), and small vertebrates (frogs, rodents, bird eggs), 
@@ -496,8 +496,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Quercus agrifolia
     common_name: California live oak
-    dangerous_to_humans: no
-    dangerous_to_pets: yes
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "yes"
     size: 7-24 m tall, 5-20 m wide
     appearance: evergreen tree with a broad, dense, and spreading canopy; simple, dark green, and evergreen leaves that are stiff, leathery, and often convex
     habitat: coastal regions of California and Baja California, often found in coastal hills, valleys, and plains within 100 km of the Pacific Ocean
@@ -508,8 +508,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Rhus integrifolia
     common_name: lemonade sumac or berry
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 2-7 m tall, 3-7 m wide
     appearance: dense, evergreen shrub or small tree with a spreading, mounded form and dark green, leathery leaves with toothed edges
     habitat: coastal Southern California and Baja California, typically found on coastal bluffs, slopes, and in canyons below 800 meters
@@ -521,8 +521,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Salvia mellifera
     common_name: Californian black sage
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 1-2 m tall, 1-3 m wide
     appearance: dark green, wrinkled leaves and small, whorled flowers in shades of pale blue, lavender, or white
     habitat: often in sunny, hot, dry areas such as dry slopes, coastal bluffs, and in canyons below 1300 meters in coastal California and Baja California
@@ -533,8 +533,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Black phoebe
     common_name: Black Phoebe
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 16 cm (6.3 in) length, weighing 15 to 22 g (0.5 to 0.8 oz)
     appearance: Predominantly black plumage with white on belly and undertail coverts; brown
       feather tips and wing-bars on juveniles.
@@ -546,8 +546,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Western fence lizard
     common_name: Western fence lizard
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 6-9 cm body length, 15-20 cm total length
     appearance: gray, brown, or black with dark blotches; bright blue abdominal and throat patches in males and yellowish color on the rear of their thighs
     habitat: sunny, arid, open areas like woodlands, grasslands, chaparral, and coniferous forests
@@ -558,8 +558,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Schistocerca nitens
     common_name: Gray Bird Grasshopper
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 40-75 mm body length
     appearance: slender, mottled gray, brown, or yellow grasshoppers, often with a light-colored dorsal stripe running from the head to the wings;
       large and notably long, with a slender body and wings that extend beyond the abdomen
@@ -572,8 +572,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Western bluebird
     common_name: Western bluebird
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 15-19 cm length, 29-34 cm wingspan, 24-31 g weight
     appearance: Males are vibrant with a deep cobalt-blue head, throat, and back, paired with a rusty-orange breast and grayish belly; 
       females are much duller, with a gray-brown head and back, pale orange wash on the breast, and limited dull blue on the wings and tail
@@ -585,8 +585,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Sisyrinchium bellum
     common_name: western blue-eyed grass
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 15-90 cm tall, 10-50 cm wide
     appearance: perennial herb with grass-like, blue-green, fan-shaped foliage; 
       showy, star-shaped flowers that are typically violet-blue with darker veins and a bright yellow eye
@@ -599,8 +599,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Lesser goldfinch
     common_name: Lesser Goldfinch
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 9-12 cm length, 8-11.5 g weight
     appearance: bright yellow underparts, short conical bill, and distinctive white wing patches
     habitat: North America, from western USA to south-central Mexico, including coastal scrub
@@ -613,8 +613,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Steatoda nobilis
     common_name: Noble False Widow
-    dangerous_to_humans: mild
-    dangerous_to_pets: yes
+    dangerous_to_humans: "mild"
+    dangerous_to_pets: "yes"
     size: 9.5-14 mm body length (females), 7-11 mm (males)
     appearance: Brown bulbous abdomen with cream coloured markings, reddish-orange legs.
     habitat: Year-round in various habitats, including cacti, roadside cuttings, demolished
@@ -626,8 +626,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Desert cottontail
     common_name: Desert cottontail
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 36-42 cm long, 700-1,200 g weight
     appearance: Greyish-brown fur, rounded tail with white edge and underside, white belly,
       large ears carried erect
@@ -640,8 +640,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Trifolium repens
     common_name: White Clover
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 8-30 cm tall, 30+ cm diameter of spread, 2 cm flower heads
     appearance: low-growing, mat-forming perennial herb with trifoliate leaves and small, white or pink-tinged, globular flower heads
     habitat: disturbed, moist, and sunny environments such as lawns, pastures, roadsides, and fields
@@ -653,8 +653,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Cassin's kingbird
     common_name: Cassin's kingbird
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 21-23 cm length, 41 cm wingspan
     appearance: Gray head with darker cheeks; dark tail with buffy fringe and gray-olive underparts.
       Pale throat and deep yellow lower breast.
@@ -669,8 +669,8 @@ blurbs:
     reviewed: true
     source: wikipedia:Mourning dove
     common_name: Mourning dove
-    dangerous_to_humans: no
-    dangerous_to_pets: no
+    dangerous_to_humans: "no"
+    dangerous_to_pets: "no"
     size: 23-36 cm long, 37-45 cm wingspan, 95-170 g weight
     appearance: slender, medium-sized bird; light gray and brown body with black spots on wings, long pointed tail with white edges, and a small head
     habitat: open and semi-open habitats across North and Central America, including urban areas, farmland, grasslands, and deserts

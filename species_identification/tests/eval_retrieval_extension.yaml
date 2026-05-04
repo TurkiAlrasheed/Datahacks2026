@@ -1,0 +1,437 @@
+# RoboRanger retrieval eval set - extension items
+#
+# These items extend eval_retrieval.yaml to pressure-test the threshold band.
+# Two buckets:
+#   - hard refuses: questions sounding species-relevant whose specific answers
+#     are NOT in the corpus chunks. These should sit just below the threshold,
+#     not far below it. If they don't, the threshold is wrong or chunking
+#     dilutes the refusal signal.
+#   - dilution retrieves: long-tail questions for high-chunk-count species
+#     where the right chunk has to win against many similar candidates.
+#
+# Each item was written AFTER reading the actual chunks for Sceloporus,
+# Calypte, and Procyon. Items for other species are more speculative;
+# inspect verdicts and reclassify if a "refuse" actually retrieves a real
+# matching chunk.
+#
+# Append the contents of this file's `eval_set:` list into the main
+# eval_retrieval.yaml. Or: load both files and concatenate in the harness.
+
+eval_set:
+
+  # ===========================================================================
+  # HARD REFUSES - species-adjacent vocabulary, no specific answer in corpus
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # Sceloporus occidentalis - hard refuses
+  # ---------------------------------------------------------------------------
+
+  - id: hard_sceloporus_001
+    query: "how long do western fence lizards live"
+    species_id: Sceloporus_occidentalis
+    expected: refuse
+    notes: |
+      Lifespan never stated in the chunks. "Spring of their second year"
+      gives age-of-first-breeding but not max age. Lifespan vocabulary
+      ("life", "year", "old") will weakly match breeding/age content -
+      a real threshold-band test.
+
+  - id: hard_sceloporus_002
+    query: "what does it sound like"
+    species_id: Sceloporus_occidentalis
+    expected: refuse
+    notes: |
+      Lizards don't vocalize and the chunks don't address sound. "Sound"
+      may weakly match nothing or weakly match displays/push-ups. Probes
+      whether the retriever returns garbage at low similarity.
+
+  - id: hard_sceloporus_003
+    query: "how cold can they survive"
+    species_id: Sceloporus_occidentalis
+    expected: refuse
+    notes: |
+      Brumation is mentioned but specific cold tolerance isn't. "Cold"
+      will match thermoregulation/brumation content - good test of
+      partial-match threshold behavior.
+
+  - id: hard_sceloporus_004
+    query: "do baby lizards look like the adults"
+    species_id: Sceloporus_occidentalis
+    expected: refuse
+    notes: |
+      Chunks say juveniles have faint or absent blue, but never describe
+      hatchling appearance specifically. "Baby/juvenile" + "look" should
+      match the description chunk weakly.
+
+  - id: hard_sceloporus_005
+    query: "are they aggressive towards each other"
+    species_id: Sceloporus_occidentalis
+    expected: retrieve
+    expected_keywords: [defend, combat, push-up, posturing]
+    notes: |
+      MOVED to retrieve after reading chunks - territorial defense up to
+      7.5 m radius, push-ups, combat are explicitly described. Reclassify
+      this if eval shows it retrieving correctly.
+
+  # ---------------------------------------------------------------------------
+  # Calypte anna - hard refuses
+  # ---------------------------------------------------------------------------
+
+  - id: hard_calypte_001
+    query: "how long can they live"
+    species_id: Calypte_anna
+    expected: refuse
+    notes: |
+      Lifespan/longevity not in the chunks. Population estimates and
+      conservation status are present, neither answers max age.
+
+  - id: hard_calypte_002
+    query: "how high do they fly"
+    species_id: Calypte_anna
+    expected: refuse
+    notes: |
+      Altitude range up to 2,825 m IS in chunks but as habitat elevation,
+      not flight ceiling. "How high" is ambiguous - if retrieval grabs
+      the elevation chunk, that's a borderline case worth inspecting.
+      Real answer (flight altitude) is not in corpus. Treat as refuse.
+
+  - id: hard_calypte_003
+    query: "what eats hummingbirds"
+    species_id: Calypte_anna
+    expected: refuse
+    notes: |
+      Predators not listed in the chunks. "Eat" will match diet-related
+      content (Anna's hummingbirds eating insects), wrong direction.
+
+  - id: hard_calypte_004
+    query: "can they walk"
+    species_id: Calypte_anna
+    expected: refuse
+    notes: |
+      Locomotion-on-ground not addressed. Hummingbirds famously can't
+      really walk. Visitor curiosity question, no answer in corpus.
+
+  - id: hard_calypte_005
+    query: "what is their wingbeat frequency"
+    species_id: Calypte_anna
+    expected: refuse
+    notes: |
+      Chunks say "high wingbeat frequencies" qualitatively but never
+      give a number in Hz. The 55 shakes/sec figure is for shedding
+      rain, not wingbeat. If retrieval grabs the shake chunk and the
+      LLM downstream confuses them, that's a known failure mode -
+      worth knowing it happens.
+
+  # ---------------------------------------------------------------------------
+  # Procyon lotor - hard refuses (article is huge, must aim carefully)
+  # ---------------------------------------------------------------------------
+
+  - id: hard_procyon_001
+    query: "do raccoons purr"
+    species_id: Procyon_lotor
+    expected: refuse
+    notes: |
+      Vocal calls are mentioned (7 between mother and kits, twittering)
+      but purring specifically is not. Specific-behavior probe.
+
+  - id: hard_procyon_002
+    query: "how strong is their bite"
+    species_id: Procyon_lotor
+    expected: refuse
+    notes: |
+      Dentition is described (40 teeth, dental formula) but bite force
+      is not. "Bite" will match attack/biting content (mating-season
+      biting, attacks on pets) - good threshold-band test.
+
+  - id: hard_procyon_003
+    query: "why do they have ringed tails"
+    species_id: Procyon_lotor
+    expected: refuse
+    notes: |
+      Ringed tails ARE described as identification feature but the
+      *evolutionary why* is only obliquely suggested ("may help recognize
+      members of their species"). Won't satisfy a curious visitor;
+      genuinely thin coverage. Edge case.
+
+  - id: hard_procyon_004
+    query: "how do they see in the dark"
+    species_id: Procyon_lotor
+    expected: retrieve
+    expected_keywords: [tapetum, twilight, vision]
+    notes: |
+      MOVED to retrieve - chunks explicitly describe tapetum lucidum and
+      twilight vision. Was going to be a refuse; reading caught it.
+
+  - id: hard_procyon_005
+    query: "are raccoons related to bears"
+    species_id: Procyon_lotor
+    expected: retrieve
+    expected_keywords: [bear, ursus, related, ancestor]
+    notes: |
+      MOVED to retrieve - "molecular analysis indicates a closer
+      relationship between raccoons and bears" is explicitly in chunks.
+      Surprisingly specific.
+
+  # ---------------------------------------------------------------------------
+  # Apis mellifera - hard refuses (60 chunks, must lean on absent specifics)
+  # ---------------------------------------------------------------------------
+
+  - id: hard_apis_001
+    query: "what is the sound of a beehive"
+    species_id: Apis_mellifera
+    expected: refuse
+    notes: |
+      Acoustics/sound-of-hive likely not in encyclopedic chunks. Sensory-
+      experiential probe. Will weakly match buzz-related content if any.
+
+  - id: hard_apis_002
+    query: "do bees recognize their keeper"
+    species_id: Apis_mellifera
+    expected: refuse
+    notes: |
+      Beekeeper-specific behavioral question. Wikipedia covers beekeeping
+      but typically not human-bee individual recognition.
+
+  - id: hard_apis_003
+    query: "how do you tell a male from a female"
+    species_id: Apis_mellifera
+    expected: refuse
+    notes: |
+      Drone vs worker is a caste distinction, not really male/female ID
+      in the way visitors mean. Phrasing mismatch test.
+
+  - id: hard_apis_004
+    query: "are they intelligent"
+    species_id: Apis_mellifera
+    expected: refuse
+    notes: |
+      Subjective/anthropomorphic question. Not directly addressed in
+      Wikipedia-style content even if dance/cognition research exists.
+
+  # ---------------------------------------------------------------------------
+  # Steatoda nobilis - hard refuses
+  # ---------------------------------------------------------------------------
+
+  - id: hard_steatoda_001
+    query: "how big is the web"
+    species_id: Steatoda_nobilis
+    expected: refuse
+    notes: |
+      Web dimensions probably not in chunks. "Web" may match cobweb/
+      theridiid content. Tests whether retrieval falls back gracefully.
+
+  - id: hard_steatoda_002
+    query: "do they jump"
+    species_id: Steatoda_nobilis
+    expected: refuse
+    notes: |
+      Locomotion specifics not typically in spider Wikipedia articles.
+      "Attack wrap" content may match weakly via "leap"/movement words.
+
+  - id: hard_steatoda_003
+    query: "how do you tell it apart from a black widow"
+    species_id: Steatoda_nobilis
+    expected: refuse
+    notes: |
+      Critical safety-adjacent question that the corpus genuinely may
+      not address (Wikipedia for noble false widow may compare or may
+      not). If this retrieves cleanly, MOVE to retrieve. If not, this
+      is exactly the kind of question visitor needs the LLM to refuse
+      rather than guess.
+
+  # ---------------------------------------------------------------------------
+  # Otospermophilus beecheyi - hard refuses
+  # ---------------------------------------------------------------------------
+
+  - id: hard_squirrel_001
+    query: "how high can they climb"
+    species_id: Otospermophilus_beecheyi
+    expected: refuse
+    notes: |
+      Ground squirrels - climbing not their thing. Not addressed in
+      typical chunks. May weakly match burrow/den content.
+
+  - id: hard_squirrel_002
+    query: "do they store food for winter"
+    species_id: Otospermophilus_beecheyi
+    expected: refuse
+    notes: |
+      Caching behavior - some ground squirrels do, some don't. Likely
+      mentioned briefly or not at all in Wikipedia. Inspect verdict.
+
+  # ---------------------------------------------------------------------------
+  # Plant-specific hard refuses (Quercus, Diplacus)
+  # ---------------------------------------------------------------------------
+
+  - id: hard_quercus_001
+    query: "is the wood good for furniture"
+    species_id: Quercus_agrifolia
+    expected: refuse
+    notes: |
+      Wood-use info isn't standard for ecology-focused Wikipedia
+      articles. Tests retrieval on practical-use questions.
+
+  - id: hard_quercus_002
+    query: "how fast do they grow"
+    species_id: Quercus_agrifolia
+    expected: refuse
+    notes: |
+      Growth rate not typically in Wikipedia tree articles. "Old" is
+      addressed but not annual growth.
+
+  - id: hard_diplacus_001
+    query: "what color are the seeds"
+    species_id: Diplacus_puniceus
+    expected: refuse
+    notes: |
+      Sparse-article test. Seed morphology unlikely in stub.
+
+  # ===========================================================================
+  # DILUTION-STRESS RETRIEVES - long articles, right chunk among many
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # Apis mellifera (60 chunks - the dilution stress case)
+  # ---------------------------------------------------------------------------
+
+  - id: dilute_apis_001
+    query: "what is the waggle dance"
+    species_id: Apis_mellifera
+    expected: retrieve
+    expected_keywords: [dance, waggle, communicate]
+    notes: |
+      Famous behavior. Specific term "waggle dance" should retrieve
+      exactly the right chunk if chunking and embedding are clean.
+
+  - id: dilute_apis_002
+    query: "how do drones differ from workers"
+    species_id: Apis_mellifera
+    expected: retrieve
+    expected_keywords: [drone, worker, male]
+    notes: |
+      Caste-comparison question. Multiple chunks discuss drones AND
+      workers separately - the right answer needs the comparison chunk
+      or at least one that mentions both, not isolated content.
+
+  - id: dilute_apis_003
+    query: "how do they make wax"
+    species_id: Apis_mellifera
+    expected: retrieve
+    expected_keywords: [wax, gland, comb]
+    notes: |
+      Specific wax-production query. Should retrieve construction-
+      related chunk among the 60.
+
+  - id: dilute_apis_004
+    query: "what is royal jelly"
+    species_id: Apis_mellifera
+    expected: retrieve
+    expected_keywords: [royal, jelly, queen]
+    notes: |
+      Caste-determination chemistry. Probably in the chunks. If not,
+      reclassify.
+
+  - id: dilute_apis_005
+    query: "how do they choose a new queen"
+    species_id: Apis_mellifera
+    expected: retrieve
+    expected_keywords: [queen, larva, swarm]
+    notes: |
+      Multi-chunk question - involves swarming AND queen-rearing AND
+      larval feeding. Tests whether the retriever finds at least one
+      relevant chunk among three plausible neighbourhoods.
+
+  # ---------------------------------------------------------------------------
+  # Procyon lotor (large article)
+  # ---------------------------------------------------------------------------
+
+  - id: dilute_procyon_001
+    query: "how heavy can a raccoon get"
+    species_id: Procyon_lotor
+    expected: retrieve
+    expected_keywords: [weight, kg, lb]
+    notes: |
+      Specific weight stats are in description chunks. Multiple weight
+      figures across chunks (range, max, regional variation). Right
+      chunk should be weight-focused, not range/habitat-focused.
+
+  - id: dilute_procyon_002
+    query: "can they swim"
+    species_id: Procyon_lotor
+    expected: retrieve
+    expected_keywords: [swim, water]
+    notes: |
+      Swimming explicitly addressed (5 km/h, several hours). Tests
+      whether retrieval grabs the locomotion chunk vs. the dousing-
+      food chunk that also mentions water.
+
+  - id: dilute_procyon_003
+    query: "are they smart"
+    species_id: Procyon_lotor
+    expected: retrieve
+    expected_keywords: [intelligence, lock, memory, problem]
+    notes: |
+      Cognition is a big section in the chunks (Davis lock study,
+      memory persistence, neuron density). Generic "smart" query
+      should still find the cognition chunks among many candidates.
+
+  - id: dilute_procyon_004
+    query: "what do they do in winter"
+    species_id: Procyon_lotor
+    expected: retrieve
+    expected_keywords: [winter, fat, rest, snow]
+    notes: |
+      Winter behavior is in chunks (winter rest, fat doubling). Generic
+      seasonal query - tests semantic match without the word "rest" or
+      "torpor" in the query.
+
+  - id: dilute_procyon_005
+    query: "where do they sleep"
+    species_id: Procyon_lotor
+    expected: retrieve
+    expected_keywords: [den, hollow, tree, sleep]
+    notes: |
+      Den behavior is in habitat chunks. "Sleep" is a colloquial term;
+      the chunks use "dens" and "sleeping places". Tests embedding's
+      ability to bridge informal/formal vocabulary.
+
+  # ---------------------------------------------------------------------------
+  # Calypte anna - one specific dilution test informed by chunk reading
+  # ---------------------------------------------------------------------------
+
+  - id: dilute_calypte_001
+    query: "how do they survive cold winters"
+    species_id: Calypte_anna
+    expected: retrieve
+    expected_keywords: [torpor, fat, metabolic, cold]
+    notes: |
+      Torpor is explicitly described. Specific chunk on cold survival
+      via metabolic-rate reduction. Tests retrieval against the many
+      range-expansion chunks that ALSO mention cold tolerance.
+
+  - id: dilute_calypte_002
+    query: "what is their nest made of"
+    species_id: Calypte_anna
+    expected: retrieve
+    expected_keywords: [nest, plant, fiber, spider, silk]
+    notes: |
+      Nest construction is specifically described (plant fibers, downy
+      feathers, spider silk binding, lichen camouflage). One of the
+      more memorable factoids; should retrieve cleanly.
+
+  # ---------------------------------------------------------------------------
+  # Steatoda - additional dilution test
+  # ---------------------------------------------------------------------------
+
+  - id: dilute_steatoda_001
+    query: "are there any reported deaths from this spider"
+    species_id: Steatoda_nobilis
+    expected: retrieve
+    expected_keywords: [death, fatality, anaphylactic, severe]
+    notes: |
+      Deaths/severe-outcome chunks exist (anaphylactic shock reports,
+      sensational UK news). Tests whether the retriever surfaces them
+      for a direct mortality query. Note: if this retrieves, the LLM
+      response layer needs to handle it carefully - corpus overstates
+      risk relative to medical consensus.

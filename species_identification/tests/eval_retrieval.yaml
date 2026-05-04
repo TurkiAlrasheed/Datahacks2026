@@ -1,0 +1,532 @@
+# RoboRanger retrieval eval set.
+#
+# Purpose: validate that the corpus.db retriever (bge-small-en-v1.5 over
+# sqlite-vec) returns relevant chunks for in-scope questions and produces
+# low-similarity scores for out-of-scope ones, so we can pick a refusal
+# threshold that lives in the gap between the two.
+#
+# Each item:
+#   id:                stable identifier
+#   query:             the question as a visitor might phrase it
+#   species_id:        what the classifier (notionally) returned for this turn
+#   expected:          retrieve | refuse | blurb
+#                        - retrieve: long-tail question, should hit a Wikipedia
+#                          chunk with high similarity
+#                        - refuse:   off-topic OR question the corpus genuinely
+#                          can't answer; cosine should fall below threshold
+#                        - blurb:    common-case question that the intent
+#                          router should answer from blurb fields without
+#                          touching the retriever at all
+#   expected_keywords: words/phrases that should appear in the top retrieved
+#                      chunk for `retrieve` items. Used as a cheap proxy for
+#                      relevance — if none of these appear, retrieval failed.
+#                      For `refuse` items, this field is omitted.
+#   notes:             why this query is in the set (failure modes it probes)
+
+eval_set:
+
+  # ---------------------------------------------------------------------------
+  # Sceloporus occidentalis - western fence lizard
+  # 10 chunks. Canonical "easy" reptile case.
+  # ---------------------------------------------------------------------------
+
+  - id: sceloporus_001
+    query: "what does this lizard eat"
+    species_id: Sceloporus_occidentalis
+    expected: blurb
+    notes: Diet is a blurb field; intent router should short-circuit before retrieval.
+
+  - id: sceloporus_002
+    query: "where do western fence lizards live"
+    species_id: Sceloporus_occidentalis
+    expected: blurb
+    notes: Habitat is a blurb field.
+
+  - id: sceloporus_003
+    query: "is it dangerous"
+    species_id: Sceloporus_occidentalis
+    expected: blurb
+    notes: dangerous_to_humans field. Common visitor question.
+
+  - id: sceloporus_004
+    query: "do these lizards have anything to do with lyme disease"
+    species_id: Sceloporus_occidentalis
+    expected: retrieve
+    expected_keywords: [lyme, tick, borrelia]
+    notes: |
+      The famous fence-lizard-blood-kills-Borrelia angle. Long-tail and
+      genuinely interesting; only in the corpus, not the blurb.
+
+  - id: sceloporus_005
+    query: "why is the belly blue"
+    species_id: Sceloporus_occidentalis
+    expected: retrieve
+    expected_keywords: [blue, belly, male]
+    notes: ID-specific question that goes beyond the appearance blurb field.
+
+  - id: sceloporus_006
+    query: "can they regrow their tail"
+    species_id: Sceloporus_occidentalis
+    expected: retrieve
+    expected_keywords: [tail, autotomy, regrow]
+    notes: |
+      Classic lizard fact. May or may not be in this article specifically -
+      diagnostic for whether retrieval correctly returns nothing (and we
+      refuse) when the corpus lacks it.
+
+  # ---------------------------------------------------------------------------
+  # Otospermophilus beecheyi - California ground squirrel
+  # ---------------------------------------------------------------------------
+
+  - id: ground_squirrel_001
+    query: "what is this animal"
+    species_id: Otospermophilus_beecheyi
+    expected: blurb
+    notes: Generic "what is it" - blurb common_name + appearance.
+
+  - id: ground_squirrel_002
+    query: "do they hibernate"
+    species_id: Otospermophilus_beecheyi
+    expected: retrieve
+    expected_keywords: [hibernate, torpor, winter]
+    notes: Behavior detail beyond what the blurb captures.
+
+  - id: ground_squirrel_003
+    query: "are they immune to rattlesnake venom"
+    species_id: Otospermophilus_beecheyi
+    expected: retrieve
+    expected_keywords: [rattlesnake, venom, resistance]
+    notes: |
+      Famous adaptation. Tests retrieval on a specific predator interaction
+      claim that should be deep in the Wikipedia article.
+
+  - id: ground_squirrel_004
+    query: "will it bite my dog"
+    species_id: Otospermophilus_beecheyi
+    expected: blurb
+    notes: dangerous_to_pets blurb field.
+
+  # ---------------------------------------------------------------------------
+  # Steatoda nobilis - noble false widow
+  # 15 chunks. Critical for danger-related field routing.
+  # ---------------------------------------------------------------------------
+
+  - id: steatoda_001
+    query: "is this spider dangerous"
+    species_id: Steatoda_nobilis
+    expected: blurb
+    notes: |
+      THE most important question for this species. Must be answered from
+      blurb (`dangerous_to_humans`), NOT from the corpus chunks about
+      neuromuscular paralysis or anaphylaxis - those are for follow-ups.
+
+  - id: steatoda_002
+    query: "what happens if it bites me"
+    species_id: Steatoda_nobilis
+    expected: retrieve
+    expected_keywords: [bite, symptom, pain]
+    notes: |
+      Symptom detail beyond the blurb's danger rating. Should retrieve the
+      bite-effects chunk; tests that retrieval distinguishes "is it
+      dangerous" (blurb) from "what are the symptoms" (corpus).
+
+  - id: steatoda_003
+    query: "how does the venom work"
+    species_id: Steatoda_nobilis
+    expected: retrieve
+    expected_keywords: [venom, neuromuscular, paralysis]
+    notes: |
+      Mechanism question - chunks explicitly describe neuromuscular
+      paralysis and predigestion. Should retrieve cleanly.
+
+  - id: steatoda_004
+    query: "how do they catch their prey"
+    species_id: Steatoda_nobilis
+    expected: retrieve
+    expected_keywords: [attack, wrap, prey]
+    notes: |
+      Tests the specific "attack wrap" strategy chunk. Distinct from
+      generic web/cobweb chunk content.
+
+  - id: steatoda_005
+    query: "where did this spider come from originally"
+    species_id: Steatoda_nobilis
+    expected: retrieve
+    expected_keywords: [Madeira, Canary, native, origin]
+    notes: |
+      Origin/invasion-history question. Long-tail and not in any blurb
+      field; tests whether retrieval finds the geography chunk.
+
+  # ---------------------------------------------------------------------------
+  # Apis mellifera - western honey bee
+  # 60 chunks. Tests whether long articles dilute retrieval signal.
+  # ---------------------------------------------------------------------------
+
+  - id: apis_001
+    query: "what is this bug"
+    species_id: Apis_mellifera
+    expected: blurb
+    notes: Identification - blurb common_name.
+
+  - id: apis_002
+    query: "do bees die after they sting"
+    species_id: Apis_mellifera
+    expected: retrieve
+    expected_keywords: [sting, die, stinger]
+    notes: |
+      Chunks explicitly address this misconception. Critical test - with
+      60 chunks, a weak retriever could easily return generic colony
+      content instead of the specific stinger chunk.
+
+  - id: apis_003
+    query: "how long does the queen live"
+    species_id: Apis_mellifera
+    expected: retrieve
+    expected_keywords: [queen, years, lifespan]
+    notes: |
+      Specific lifespan claim ("three to five years") is in the chunks.
+      Probes whether the dilution problem hits with 60 candidates.
+
+  - id: apis_004
+    query: "what is a swarm"
+    species_id: Apis_mellifera
+    expected: retrieve
+    expected_keywords: [swarm, queen, colony]
+    notes: |
+      Behavior/reproduction question. Tests retrieval against multiple
+      behavior-categorized chunks.
+
+  - id: apis_005
+    query: "how is honey made"
+    species_id: Apis_mellifera
+    expected: retrieve
+    expected_keywords: [nectar, evaporate, honey]
+    notes: |
+      Chunks describe the specific evaporation/wax-capping process. Common
+      visitor question with a specific answer in corpus.
+
+  - id: apis_006
+    query: "what is colony collapse disorder"
+    species_id: Apis_mellifera
+    expected: retrieve
+    expected_keywords: [colony, collapse, varroa]
+    notes: |
+      Mentioned in the general chunks. Tests cross-category retrieval
+      (the threat is mentioned in `general`, not just a dedicated section).
+
+  # ---------------------------------------------------------------------------
+  # Calypte anna - Anna's hummingbird
+  # ---------------------------------------------------------------------------
+
+  - id: calypte_001
+    query: "what color is this hummingbird"
+    species_id: Calypte_anna
+    expected: blurb
+    notes: Appearance blurb field.
+
+  - id: calypte_002
+    query: "how fast can they dive"
+    species_id: Calypte_anna
+    expected: retrieve
+    expected_keywords: [dive, courtship, speed]
+    notes: |
+      Famous courtship dive (highest length-adjusted speed of any bird).
+      Specific factoid that should be in the corpus.
+
+  - id: calypte_003
+    query: "what do hummingbirds eat besides nectar"
+    species_id: Calypte_anna
+    expected: retrieve
+    expected_keywords: [insect, spider, nectar]
+    notes: |
+      Tests retrieval of diet detail beyond the blurb's one-liner. Most
+      visitors don't realize hummingbirds eat insects.
+
+  # ---------------------------------------------------------------------------
+  # Quercus agrifolia - coast live oak
+  # Plant test - different question vocabulary.
+  # ---------------------------------------------------------------------------
+
+  - id: quercus_001
+    query: "what kind of tree is this"
+    species_id: Quercus_agrifolia
+    expected: blurb
+    notes: ID question - blurb common_name + appearance.
+
+  - id: quercus_002
+    query: "how old can these oaks get"
+    species_id: Quercus_agrifolia
+    expected: retrieve
+    expected_keywords: [years, age, old]
+    notes: |
+      Lifespan question. Plants don't have "behavior" in the animal sense,
+      so the blurb may be thinner here - good test of plant retrieval.
+
+  - id: quercus_003
+    query: "do the acorns get eaten by anything"
+    species_id: Quercus_agrifolia
+    expected: retrieve
+    expected_keywords: [acorn, squirrel, jay, wildlife]
+    notes: |
+      Ecology question. Tests whether plant chunks include faunal
+      interactions or just botanical description.
+
+  # ---------------------------------------------------------------------------
+  # Diplacus puniceus - red bush monkeyflower
+  # Only 5 chunks. Sparse-article probe.
+  # ---------------------------------------------------------------------------
+
+  - id: diplacus_001
+    query: "what is this flower"
+    species_id: Diplacus_puniceus
+    expected: blurb
+    notes: ID - blurb.
+
+  - id: diplacus_002
+    query: "what pollinates it"
+    species_id: Diplacus_puniceus
+    expected: retrieve
+    expected_keywords: [hummingbird, pollinate, bee]
+    notes: |
+      Plausible content for a monkeyflower article (often hummingbird-
+      pollinated). Diagnostic - if this fails to retrieve, sparse articles
+      are a real problem.
+
+  - id: diplacus_003
+    query: "is it native to california"
+    species_id: Diplacus_puniceus
+    expected: retrieve
+    expected_keywords: [California, native, endemic]
+    notes: Range/native-status question. Should be in any decent stub.
+
+  - id: diplacus_004
+    query: "how do you grow it in a garden"
+    species_id: Diplacus_puniceus
+    expected: refuse
+    notes: |
+      Cultivation/horticulture is unlikely to be in a Wikipedia stub for
+      a wild-occurring species. Should hit the refuse threshold.
+
+  # ---------------------------------------------------------------------------
+  # Hylephila phyleus - fiery skipper
+  # Lookalike-confusion probe vs. better-documented butterflies.
+  # ---------------------------------------------------------------------------
+
+  - id: hylephila_001
+    query: "what kind of butterfly is this"
+    species_id: Hylephila_phyleus
+    expected: blurb
+    notes: ID. Critical - must NOT confuse with monarch/swallowtail.
+
+  - id: hylephila_002
+    query: "what plants do the caterpillars eat"
+    species_id: Hylephila_phyleus
+    expected: retrieve
+    expected_keywords: [grass, larva, host]
+    notes: |
+      Skipper caterpillars feed on grasses (Bermuda grass, etc.). Tests
+      whether retrieval finds host-plant info on a sparse article and
+      doesn't pollute with monarch/milkweed content.
+
+  - id: hylephila_003
+    query: "do they migrate like monarchs"
+    species_id: Hylephila_phyleus
+    expected: refuse
+    notes: |
+      Cross-species comparison question. Wikipedia for fiery skipper
+      almost certainly doesn't address monarch-style migration directly.
+      Should refuse rather than retrieve a misleading monarch chunk.
+
+  # ---------------------------------------------------------------------------
+  # Procyon lotor - raccoon
+  # ---------------------------------------------------------------------------
+
+  - id: procyon_001
+    query: "is this safe to be around"
+    species_id: Procyon_lotor
+    expected: blurb
+    notes: dangerous_to_humans blurb field.
+
+  - id: procyon_002
+    query: "will it attack my dog"
+    species_id: Procyon_lotor
+    expected: blurb
+    notes: |
+      dangerous_to_pets blurb field. Important to test - the corpus has
+      lots of attack/conflict content that must NOT override the blurb.
+
+  - id: procyon_003
+    query: "do raccoons carry rabies"
+    species_id: Procyon_lotor
+    expected: retrieve
+    expected_keywords: [rabies, vector, disease]
+    notes: |
+      Disease question is corpus-territory, not blurb - blurb only gives
+      the topline danger rating, not the disease vector detail.
+
+  - id: procyon_004
+    query: "why do they wash their food"
+    species_id: Procyon_lotor
+    expected: retrieve
+    expected_keywords: [wash, water, dousing]
+    notes: |
+      Famous behavior. Specific factoid in the corpus. Note: the actual
+      explanation (sensory not hygienic) is itself an interesting test of
+      whether the model conveys it correctly downstream.
+
+  # ---------------------------------------------------------------------------
+  # Laetiporus gilbertsonii - bracket fungus
+  # Only 3 chunks. Hardest case in the set.
+  # ---------------------------------------------------------------------------
+
+  - id: laetiporus_001
+    query: "what is this mushroom"
+    species_id: Laetiporus_gilbertsonii
+    expected: blurb
+    notes: ID - blurb only.
+
+  - id: laetiporus_002
+    query: "can you eat it"
+    species_id: Laetiporus_gilbertsonii
+    expected: blurb
+    notes: |
+      Edibility maps to dangerous_to_humans, which the blurb covers.
+      Should NOT touch the retriever even though the corpus likely has
+      relevant content - blurb path is faster and safer.
+
+  - id: laetiporus_003
+    query: "what trees does it grow on"
+    species_id: Laetiporus_gilbertsonii
+    expected: retrieve
+    expected_keywords: [oak, eucalyptus, host]
+    notes: |
+      Host substrate is plausible Wikipedia content even for a thin
+      article. Probe of whether 3 chunks is enough.
+
+  - id: laetiporus_004
+    query: "how do you cook it"
+    species_id: Laetiporus_gilbertsonii
+    expected: refuse
+    notes: |
+      Cooking instructions definitely aren't in Wikipedia. Should refuse
+      cleanly. (Also a soft safety case - we don't want a wildlife guide
+      bot recommending fungus prep methods.)
+
+  # ---------------------------------------------------------------------------
+  # SHOULD-REFUSE: off-topic queries (no species context could rescue them)
+  # ---------------------------------------------------------------------------
+
+  - id: refuse_offtopic_001
+    query: "what is the weather today"
+    species_id: Sceloporus_occidentalis
+    expected: refuse
+    notes: |
+      Weather query against a lizard species. Cosine sim should be very
+      low - good signal of the floor of the threshold band.
+
+  - id: refuse_offtopic_002
+    query: "what time is it"
+    species_id: Apis_mellifera
+    expected: refuse
+    notes: Generic off-topic.
+
+  - id: refuse_offtopic_003
+    query: "tell me a joke"
+    species_id: Procyon_lotor
+    expected: refuse
+    notes: Conversational filler, definitionally off-topic.
+
+  - id: refuse_offtopic_004
+    query: "how do I get to the beach from here"
+    species_id: Calypte_anna
+    expected: refuse
+    notes: |
+      Navigation query. Tricky - "beach" might weakly match coastal
+      species chunks. Good probe of the threshold.
+
+  - id: refuse_offtopic_005
+    query: "what is the capital of france"
+    species_id: Quercus_agrifolia
+    expected: refuse
+    notes: Pure off-topic factual.
+
+  # ---------------------------------------------------------------------------
+  # SHOULD-REFUSE: cross-species questions (classifier returned X, asked about Y)
+  # ---------------------------------------------------------------------------
+
+  - id: refuse_crossspecies_001
+    query: "do polar bears live here"
+    species_id: Procyon_lotor
+    expected: refuse
+    notes: |
+      "Polar bears" is a confounder - both are mammals, both are
+      charismatic. Refusal here means the retriever isn't just topic-
+      matching at the broadest level.
+
+  - id: refuse_crossspecies_002
+    query: "what does the monarch butterfly look like"
+    species_id: Hylephila_phyleus
+    expected: refuse
+    notes: |
+      Asked about monarch while looking at a fiery skipper. Even though
+      both are butterflies, classifier said skipper - retrieval should
+      not return skipper chunks for a monarch question (low keyword
+      overlap) and the response layer should refuse rather than answer
+      from skipper chunks.
+
+  - id: refuse_crossspecies_003
+    query: "tell me about the great horned owl"
+    species_id: Calypte_anna
+    expected: refuse
+    notes: |
+      Asked about a different species in the corpus (Bubo virginianus)
+      while looking at a hummingbird. The retriever filters by
+      species_id, so this should refuse cleanly - any failure here
+      means species filtering is broken.
+
+  # ---------------------------------------------------------------------------
+  # SHOULD-REFUSE: seashore non-species class
+  # ---------------------------------------------------------------------------
+
+  - id: refuse_seashore_001
+    query: "what is this animal"
+    species_id: seashore
+    expected: refuse
+    notes: |
+      Classifier returned `seashore` (the non-species negative class).
+      Should be intercepted before retrieval ever runs - there's no
+      species_id to retrieve against.
+
+  - id: refuse_seashore_002
+    query: "is it dangerous"
+    species_id: seashore
+    expected: refuse
+    notes: Same case, generic question.
+
+  # ---------------------------------------------------------------------------
+  # SHOULD-REFUSE: in-scope feel but not corpus-answerable
+  # ---------------------------------------------------------------------------
+
+  - id: refuse_unknowable_001
+    query: "how many of these are in la jolla cove right now"
+    species_id: Otospermophilus_beecheyi
+    expected: refuse
+    notes: |
+      Sounds species-relevant but no document could answer it.
+      Realistic visitor question.
+
+  - id: refuse_unknowable_002
+    query: "is the one I'm looking at male or female"
+    species_id: Sceloporus_occidentalis
+    expected: refuse
+    notes: |
+      Tempting because dimorphism IS in the corpus, but the visitor is
+      asking about a specific individual the bot can't see. Behavior on
+      this is more about the response layer than retrieval, but worth
+      logging the cosine sim - probably high (matches dimorphism chunks).
+
+  - id: refuse_unknowable_003
+    query: "is this one a baby"
+    species_id: Procyon_lotor
+    expected: refuse
+    notes: Same shape as above - individual-level question.
