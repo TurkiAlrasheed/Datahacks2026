@@ -220,13 +220,14 @@ def sample_blurb():
     return Blurb(
         common_name="Western Fence Lizard",
         scientific_name="Sceloporus occidentalis",
-        description="Small spiny lizard with blue belly patches in males.",
+        appearance="Small spiny lizard with blue belly patches in males. Spiny scales, gray-brown body.",
+        size="6-9 cm body length",
         habitat="Rocks, fences, woodpiles across the western US.",
         diet="Insects and small arthropods.",
         behavior="Active in daytime, basks on sunny surfaces.",
-        danger="Harmless to humans.",
-        identification="Spiny scales, blue belly, gray-brown body.",
-        conservation="Common; not listed.",
+        dangerous_to_humans="no",
+        dangerous_to_pets="no",
+        notable="Their blood kills Lyme disease bacteria in tick guts.",
     )
 
 
@@ -282,7 +283,7 @@ class TestPromptBuilder:
 
     def test_intent_specific_field_leads_blurb(self, sample_blurb,
                                                 sample_chunks):
-        # DANGER intent should put the danger field BEFORE the description.
+        # DANGER intent should put the danger line BEFORE the appearance.
         msgs = build_messages(
             query="is it dangerous?",
             blurb=sample_blurb,
@@ -291,10 +292,10 @@ class TestPromptBuilder:
         )
         content = msgs[1]["content"]
         danger_pos = content.find("- danger:")
-        desc_pos = content.find("- description:")
+        appearance_pos = content.find("- appearance:")
         assert danger_pos > 0
-        assert desc_pos > 0
-        assert danger_pos < desc_pos
+        assert appearance_pos > 0
+        assert danger_pos < appearance_pos
 
     def test_diet_intent_leads_with_diet(self, sample_blurb, sample_chunks):
         msgs = build_messages(
@@ -305,8 +306,8 @@ class TestPromptBuilder:
         )
         content = msgs[1]["content"]
         diet_pos = content.find("- diet:")
-        desc_pos = content.find("- description:")
-        assert diet_pos < desc_pos
+        appearance_pos = content.find("- appearance:")
+        assert diet_pos < appearance_pos
 
     def test_empty_chunks_produces_explicit_marker(self, sample_blurb):
         msgs = build_messages(
@@ -367,7 +368,7 @@ class TestPromptBuilder:
         assert "Mystery Bird" in msgs[1]["content"]
 
     def test_blurb_omits_empty_fields(self, sample_blurb):
-        partial = Blurb(common_name="Partial Species", description="A thing.")
+        partial = Blurb(common_name="Partial Species", appearance="A thing.")
         msgs = build_messages(
             query="describe",
             blurb=partial,
@@ -375,10 +376,10 @@ class TestPromptBuilder:
             intent_result=_ir(Intent.DESCRIPTION),
         )
         content = msgs[1]["content"]
-        # Should contain description but not empty fields.
-        assert "- description:" in content
+        # Should contain appearance but not the empty fields.
+        assert "- appearance:" in content
         assert "- habitat:" not in content
-        assert "- danger:" not in content
+        assert "- danger:" not in content   # no enums set, no danger line
 
     def test_unknown_intent_falls_back_to_other_task(self, sample_blurb):
         msgs = build_messages(
@@ -388,6 +389,51 @@ class TestPromptBuilder:
             intent_result=_ir(Intent.OTHER),
         )
         assert "TASK:" in msgs[1]["content"]
+
+    def test_danger_line_collapses_when_humans_and_pets_match(
+        self, sample_blurb,
+    ):
+        msgs = build_messages(
+            query="is it safe",
+            blurb=sample_blurb,
+            chunks=[],
+            intent_result=_ir(Intent.DANGER),
+        )
+        # sample_blurb has humans=no and pets=no, so the line should collapse.
+        content = msgs[1]["content"]
+        assert "- danger: no (humans and pets)" in content
+        assert "humans: no" not in content   # not the split form
+
+    def test_danger_line_splits_when_humans_and_pets_differ(self):
+        blurb = Blurb(
+            common_name="Mixed Risk Species",
+            dangerous_to_humans="no",
+            dangerous_to_pets="yes",
+        )
+        msgs = build_messages(
+            query="is it safe",
+            blurb=blurb,
+            chunks=[],
+            intent_result=_ir(Intent.DANGER),
+        )
+        content = msgs[1]["content"]
+        assert "humans: no" in content
+        assert "pets: yes" in content
+
+    def test_invalid_danger_enum_raises(self):
+        with pytest.raises(ValueError):
+            Blurb(common_name="X", dangerous_to_humans="lethal")
+
+    def test_no_danger_enums_means_no_danger_line(self, sample_blurb):
+        bare = Blurb(common_name="No Danger Info", appearance="something")
+        msgs = build_messages(
+            query="describe",
+            blurb=bare,
+            chunks=[],
+            intent_result=_ir(Intent.DANGER),
+        )
+        content = msgs[1]["content"]
+        assert "- danger:" not in content
 
 
 if __name__ == "__main__":

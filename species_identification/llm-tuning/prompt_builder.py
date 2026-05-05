@@ -68,22 +68,59 @@ class Chunk:
     source: str = ""       # optional, for debugging only — not shown to LLM
 
 
+# Allowed values for the danger enums. Mirror the schema in build_blurbs.py
+# so a typo in either file fails loudly at construction time rather than
+# silently confusing the LLM.
+DANGER_LEVELS = ("no", "mild", "yes", "unknown")
+
+
 @dataclass
 class Blurb:
     """
-    Structured species blurb. Mirrors the YAML schema from build_blurbs.py.
-    Only the fields actually used in the prompt need values; the rest can be
-    None or empty.
+    Structured species blurb. Mirrors the schema written by build_blurbs.py
+    (and stored as columns on the `species` table by compile_blurbs.py).
+
+    Field-by-field design notes:
+      - appearance: 1-2 sentences for identification. Replaces the old
+        free-form `description`. Loaded into DESCRIPTION/IDENTIFICATION
+        prompts.
+      - size: short measurement string. Useful in DESCRIPTION/IDENTIFICATION.
+      - dangerous_to_humans / dangerous_to_pets: enum strings. The prompt
+        renders the enum directly — small models read labeled enums more
+        reliably than free-form risk prose, and the corpus chunks carry
+        the specifics.
+      - notable: one-sentence interesting fact. Folded into descriptions.
+      - scientific_name: derived from species_id when constructing the
+        Blurb; not stored as a column. Optional in the dataclass for
+        cases where it's not derivable.
     """
     common_name: str
     scientific_name: str | None = None
-    description: str | None = None
+
+    # Identification / description fields
+    appearance: str | None = None
+    size: str | None = None
+
+    # Ecology fields
     habitat: str | None = None
     diet: str | None = None
     behavior: str | None = None
-    danger: str | None = None       # venom, defensive behavior, allergens
-    identification: str | None = None
-    conservation: str | None = None
+
+    # Risk fields — enums, not free text
+    dangerous_to_humans: str | None = None   # "no" | "mild" | "yes" | "unknown"
+    dangerous_to_pets: str | None = None     # same scale
+
+    # Extras
+    notable: str | None = None
+
+    def __post_init__(self) -> None:
+        for field_name in ("dangerous_to_humans", "dangerous_to_pets"):
+            v = getattr(self, field_name)
+            if v is not None and v not in DANGER_LEVELS:
+                raise ValueError(
+                    f"{field_name}={v!r} not in {DANGER_LEVELS}. "
+                    f"Check the BlurbStore column mapping or the source data."
+                )
 
 
 def _truncate(text: str | None, limit: int) -> str:
@@ -99,53 +136,102 @@ def _truncate(text: str | None, limit: int) -> str:
     return text[: limit].rstrip() + "..."
 
 
+def _format_danger_line(humans: str | None, pets: str | None) -> str | None:
+    """
+    Render the two danger enums as one prompt line. We collapse them when
+    they agree so the prompt stays compact.
+    """
+    if not humans and not pets:
+        return None
+    if humans and pets and humans == pets:
+        return f"- danger: {humans} (humans and pets)"
+    parts = []
+    if humans:
+        parts.append(f"humans: {humans}")
+    if pets:
+        parts.append(f"pets: {pets}")
+    return f"- danger: {', '.join(parts)}"
+
+
+# Default rendering order for the non-danger blurb fields. Each entry is
+# (label_for_prompt, attribute_on_blurb). Intent routing reorders this so
+# the most relevant field appears first.
+_FIELD_ORDER = [
+    ("appearance",     "appearance"),
+    ("size",           "size"),
+    ("habitat",        "habitat"),
+    ("diet",           "diet"),
+    ("behavior",       "behavior"),
+    ("notable",        "notable"),
+]
+
+# Map from intent to which field should lead. DANGER is handled specially
+# below since the danger line spans two attributes. CONSERVATION isn't in
+# the schema, so it falls through to default ordering.
+_INTENT_LEAD: dict[Intent, str] = {
+    Intent.DESCRIPTION:    "appearance",
+    Intent.IDENTIFICATION: "appearance",
+    Intent.HABITAT:        "habitat",
+    Intent.DIET:           "diet",
+    Intent.BEHAVIOR:       "behavior",
+}
+
+
 def _format_blurb(blurb: Blurb, intent: Intent) -> str:
     """
-    Format the blurb as a compact key: value block. Lead with the field most
-    relevant to the intent so the model attends to it first.
+    Format the blurb as a compact key: value block. Lead with the field
+    most relevant to the intent so the model attends to it first.
     """
-    field_order = [
-        ("description", blurb.description),
-        ("habitat", blurb.habitat),
-        ("diet", blurb.diet),
-        ("behavior", blurb.behavior),
-        ("danger", blurb.danger),
-        ("identification", blurb.identification),
-        ("conservation", blurb.conservation),
-    ]
+    # Collect non-empty (label, value) pairs in default order.
+    body_pairs: list[tuple[str, str]] = []
+    for label, attr in _FIELD_ORDER:
+        value = getattr(blurb, attr)
+        if value:
+            body_pairs.append((label, value.strip()))
 
-    intent_to_field = {
-        Intent.DESCRIPTION: "description",
-        Intent.HABITAT: "habitat",
-        Intent.DIET: "diet",
-        Intent.BEHAVIOR: "behavior",
-        Intent.DANGER: "danger",
-        Intent.IDENTIFICATION: "identification",
-        Intent.CONSERVATION: "conservation",
-    }
-    lead = intent_to_field.get(intent)
-    if lead is not None:
-        field_order.sort(key=lambda kv: 0 if kv[0] == lead else 1)
+    danger_line = _format_danger_line(
+        blurb.dangerous_to_humans, blurb.dangerous_to_pets
+    )
 
+    # Order the body lines based on intent.
+    if intent == Intent.DANGER:
+        # Danger leads; everything else follows in default order.
+        ordered_body: list[str] = []
+        if danger_line:
+            ordered_body.append(danger_line)
+        ordered_body.extend(f"- {label}: {value}" for label, value in body_pairs)
+    else:
+        lead = _INTENT_LEAD.get(intent)
+        if lead is not None:
+            body_pairs.sort(key=lambda kv: 0 if kv[0] == lead else 1)
+        ordered_body = [f"- {label}: {value}" for label, value in body_pairs]
+        if danger_line:
+            ordered_body.append(danger_line)
+
+    # Header
     header = f"Species: {blurb.common_name}"
     if blurb.scientific_name:
         header += f" ({blurb.scientific_name})"
 
-    lines = [header]
-    used = 0
-    for name, value in field_order:
-        if not value:
+    # Apply the per-blurb char budget. Truncate the line that overflows;
+    # drop everything after.
+    out = [header]
+    used = len(header)
+    for line in ordered_body:
+        if used + len(line) + 1 <= MAX_BLURB_CHARS:
+            out.append(line)
+            used += len(line) + 1
             continue
-        line = f"- {name}: {value.strip()}"
-        if used + len(line) > MAX_BLURB_CHARS:
-            line = f"- {name}: {_truncate(value, MAX_BLURB_CHARS - used - len(name) - 4)}"
-            if line.strip().endswith(":"):
-                break
-            lines.append(line)
+        # Try to fit a truncated version of this line.
+        label_part, _, value_part = line.partition(":")
+        remaining = MAX_BLURB_CHARS - used - len(label_part) - 3
+        if remaining < 20:
             break
-        lines.append(line)
-        used += len(line)
-    return "\n".join(lines)
+        truncated = _truncate(value_part.strip(), remaining)
+        if truncated:
+            out.append(f"{label_part}: {truncated}")
+        break
+    return "\n".join(out)
 
 
 def _format_chunks(chunks: Sequence[Chunk]) -> str:
@@ -231,13 +317,14 @@ if __name__ == "__main__":
     blurb = Blurb(
         common_name="Southern Pacific Rattlesnake",
         scientific_name="Crotalus oreganus helleri",
-        description="A medium-sized pit viper with a triangular head and segmented rattle.",
+        appearance="A medium-sized pit viper with a triangular head and segmented rattle. Diamond pattern fading toward the tail.",
+        size="80-130 cm long",
         habitat="Coastal sage scrub, chaparral, and rocky hillsides across Southern California.",
         diet="Small mammals, lizards, and birds, ambushed and subdued with venom.",
         behavior="Mostly crepuscular; coils and rattles when threatened.",
-        danger="Venomous. Bites are medical emergencies. Back away slowly; do not attempt to handle.",
-        identification="Diamond pattern fading toward the tail, blunt tail with rattle.",
-        conservation="Common; not listed.",
+        dangerous_to_humans="yes",
+        dangerous_to_pets="yes",
+        notable="Responsible for most envenomations in San Diego County.",
     )
     chunks = [
         Chunk(text="The Southern Pacific rattlesnake is responsible for most "
