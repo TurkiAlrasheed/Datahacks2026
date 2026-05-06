@@ -88,7 +88,7 @@ class LlamaCppBackend:
             "top_p": SAMPLING["top_p"],
             "top_k": SAMPLING["top_k"],
             "seed": SAMPLING["seed"],
-            "max_tokens": SAMPLING["max_tokens"],
+            "max_tokens": 100,                          # 200 was too slow
         }).encode()
         req = urllib.request.Request(
             f"{self.host}/v1/chat/completions",
