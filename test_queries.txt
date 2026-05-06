@@ -1,0 +1,16 @@
+# Field-guide questions (should hit blurb_only or blurb_plus_chunks)
+is it venomous?
+what does it eat?
+where does it live?
+how big does it get?
+is it dangerous to dogs?
+what time of day is it active?
+
+# Off-topic (should hit gate_rejected)
+what's the weather like
+tell me a joke
+who won the world series
+
+# Wildlife-adjacent but not field-guide (should hit intent_unclear)
+what should I name it
+write a poem about it
