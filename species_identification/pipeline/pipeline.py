@@ -80,6 +80,15 @@ MSG_OFF_TOPIC = (
 MSG_SPECIES_NOT_FOUND = (
     "I don't have information about this species yet."
 )
+# Used when the wildlife gate accepted the query but the intent classifier
+# couldn't confidently route it. This catches edge cases the gate's binary
+# decision misses — e.g. "tell me a joke about it", "what should I name
+# it", "how rare is this in movies" — which are wildlife-adjacent enough
+# to pass the gate but not real field-guide questions.
+MSG_INTENT_UNCLEAR = (
+    "I'm not sure I understand. Try asking what it eats, where it lives, "
+    "whether it's dangerous, or something along those lines."
+)
 MSG_LLM_ERROR = (
     "Sorry, I had trouble answering that. Please try again."
 )
@@ -102,6 +111,7 @@ class LLMBackend(Protocol):
 ResponsePath = Literal[
     "gate_rejected",
     "species_not_found",
+    "intent_unclear",
     "blurb_only",
     "blurb_plus_chunks",
     "llm_error",
@@ -208,11 +218,30 @@ class RoboRangerPipeline:
             )
 
         # 3. Intent classification. Drives prompt template + which blurb
-        # field leads. Doesn't gate; even OTHER queries proceed (the gate
-        # already filtered the obvious off-topic cases).
+        # field leads. Also acts as a second-line filter: if the intent
+        # classifier returns OTHER or only low confidence, the question
+        # probably isn't a real field-guide query (the gate is binary and
+        # misses some edge cases). Short-circuit to a fixed message rather
+        # than letting the LLM fabricate an answer.
         t = time.perf_counter()
         intent_result = self.intent_classifier.classify(query)
         latency["intent"] = time.perf_counter() - t
+
+        if (
+            intent_result.intent == Intent.OTHER
+            or intent_result.confidence == "low"
+        ):
+            latency["total"] = time.perf_counter() - t0
+            return Response(
+                text=MSG_INTENT_UNCLEAR,
+                path="intent_unclear",
+                species_id=species_id,
+                query=query,
+                gate=gate_result,
+                intent=intent_result,
+                blurb=blurb,
+                latency=latency,
+            )
 
         # 4. Retrieval + threshold filter.
         t = time.perf_counter()

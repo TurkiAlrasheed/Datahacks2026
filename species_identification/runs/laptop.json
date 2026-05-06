@@ -1,0 +1,109 @@
+{
+  "backend": "ollama",
+  "model": "smollm2:360m",
+  "host": "http://localhost:11434",
+  "sampling": {
+    "temperature": 0.2,
+    "top_p": 0.9,
+    "top_k": 40,
+    "seed": 42,
+    "max_tokens": 200
+  },
+  "results": [
+    {
+      "case": "answer_from_blurb_when_chunks_irrelevant",
+      "query": "is this snake dangerous?",
+      "species": "Southern Pacific Rattlesnake",
+      "expected_intent": "danger",
+      "intent": {
+        "predicted": "danger",
+        "expected": "danger",
+        "confidence": "high",
+        "score": 0.8169912099838257,
+        "margin": 0.08585703372955322,
+        "match": true
+      },
+      "response": "Yes, this snake IS dangerous to humans or pets.",
+      "latency_s": 6.992,
+      "error": null,
+      "passed": true,
+      "issues": []
+    },
+    {
+      "case": "use_chunk_when_relevant",
+      "query": "how dangerous are bites in San Diego specifically?",
+      "species": "Southern Pacific Rattlesnake",
+      "expected_intent": "danger",
+      "intent": {
+        "predicted": "danger",
+        "expected": "danger",
+        "confidence": "high",
+        "score": 0.7058176398277283,
+        "margin": 0.14856791496276855,
+        "match": true
+      },
+      "response": "Yes, bites from the Southern Pacific rattlesnake are generally considered to be dangerous for humans or pets, especially those that occur on sensitive areas such as the face and hands.",
+      "latency_s": 2.416,
+      "error": null,
+      "passed": true,
+      "issues": []
+    },
+    {
+      "case": "no_chunks_falls_back_to_blurb",
+      "query": "what does it eat?",
+      "species": "Southern Pacific Rattlesnake",
+      "expected_intent": "diet",
+      "intent": {
+        "predicted": "diet",
+        "expected": "diet",
+        "confidence": "high",
+        "score": 0.916303277015686,
+        "margin": 0.1285780668258667,
+        "match": true
+      },
+      "response": "The Southern Pacific Rattlesnake primarily feeds on small mammals, lizards, and birds, ambushing them with its venom before subduing and consuming them.",
+      "latency_s": 2.466,
+      "error": null,
+      "passed": true,
+      "issues": []
+    },
+    {
+      "case": "harmless_species_question",
+      "query": "will this lizard hurt me?",
+      "species": "Western Fence Lizard",
+      "expected_intent": "danger",
+      "intent": {
+        "predicted": "danger",
+        "expected": "danger",
+        "confidence": "high",
+        "score": 0.7905945777893066,
+        "margin": 0.11388075351715088,
+        "match": true
+      },
+      "response": "No, this species of Western Fence Lizard will not hurt you or pets.",
+      "latency_s": 2.433,
+      "error": null,
+      "passed": true,
+      "issues": []
+    },
+    {
+      "case": "safety_polarity_dangerous_species",
+      "query": "is it safe to eat?",
+      "species": "Southern Pacific Rattlesnake",
+      "expected_intent": "danger",
+      "intent": {
+        "predicted": "danger",
+        "expected": "danger",
+        "confidence": "high",
+        "score": 0.7952740788459778,
+        "margin": 0.08486002683639526,
+        "match": true
+      },
+      "response": "No, it is not safe to eat this species of rattlesnake.",
+      "latency_s": 2.461,
+      "error": null,
+      "passed": true,
+      "issues": []
+    }
+  ]
+}

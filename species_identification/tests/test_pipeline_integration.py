@@ -34,7 +34,7 @@ import sys
 sys.path.insert(1, "../species_identification/pipeline")
 sys.path.insert(2, "../species_identification/llm-tuning")
 from blurb_store import BlurbStore, BlurbStoreError
-from intent import IntentClassifier
+from intent import Intent, IntentClassifier, IntentResult
 from pipeline import RoboRangerPipeline
 from prompt_builder import Blurb
 from wildlife_gate import WildlifeGate
@@ -233,6 +233,19 @@ def main() -> int:
               "tests 2-5 will be SKIPPED. (This is a test-fixture "
               "limitation, not a pipeline bug.)")
 
+    # The stub embedder produces noisy similarity, so intent classification
+    # results on synthetic queries are unreliable. Tests 3-5 are about
+    # pipeline plumbing for the happy path and shouldn't depend on stub
+    # embedder geometry — replace the intent classifier with a stub that
+    # always returns DIET with high confidence. Test 5b tests intent-based
+    # short-circuiting separately.
+    class _ConfidentDietClassifier:
+        def classify(self, q):
+            return IntentResult(Intent.DIET, "high", 0.85, 0.10, {})
+
+    real_classifier = pipeline.intent_classifier
+    pipeline.intent_classifier = _ConfidentDietClassifier()
+
     failures = 0
 
     def check(label: str, condition: bool, detail: str = "") -> None:
@@ -322,6 +335,65 @@ def main() -> int:
               "stub error" not in resp.text.lower())
         llm.should_raise = False
         pipeline.retrieval_threshold = 0.50
+
+    print("\n=== test 5b: gate accepts but intent OTHER -> intent_unclear ===")
+    # Restore the real intent classifier — this test specifically exercises
+    # the intent-based short-circuit, so it can't run with a stubbed-confident
+    # classifier.
+    pipeline.intent_classifier = real_classifier
+
+    # Find a query that the gate accepts but the intent classifier is
+    # uncertain about. Same discovery pattern as wildlife_query — the
+    # stub embedder is deterministic but the centroid geometry depends
+    # on the prototypes, so we hunt for a fitting query.
+    unclear_query = None
+    candidates_unclear = [
+        # Wildlife-adjacent but not a real field-guide question:
+        "tell me a joke about it",
+        "what should I name it",
+        "is it cute",
+        "what's its astrological sign",
+        "do you like this animal",
+    ]
+    for q in candidates_unclear:
+        gate_r = pipeline.gate.check(q)
+        if not gate_r.in_domain:
+            continue
+        ir = pipeline.intent_classifier.classify(q)
+        if ir.intent == Intent.OTHER or ir.confidence == "low":
+            unclear_query = q
+            break
+
+    if unclear_query is None:
+        # Couldn't find a query satisfying both conditions. Force the
+        # branch deterministically by stubbing the classifier.
+        class _StubClassifier:
+            def classify(self, q):
+                return IntentResult(Intent.OTHER, "low", 0.4, 0.01, {})
+        original_clf = pipeline.intent_classifier
+        pipeline.intent_classifier = _StubClassifier()
+        try:
+            llm.calls.clear()
+            resp = pipeline.answer("Test_species", wildlife_query or "anything")
+            check("path is intent_unclear (forced)",
+                  resp.path == "intent_unclear",
+                  f"got {resp.path}")
+            check("LLM not called when intent unclear",
+                  len(llm.calls) == 0)
+            check("user-facing text guides them",
+                  "eats" in resp.text.lower() or "lives" in resp.text.lower())
+        finally:
+            pipeline.intent_classifier = original_clf
+    else:
+        llm.calls.clear()
+        resp = pipeline.answer("Test_species", unclear_query)
+        check("path is intent_unclear",
+              resp.path == "intent_unclear",
+              f"got {resp.path} for query {unclear_query!r}")
+        check("LLM not called when intent unclear",
+              len(llm.calls) == 0)
+        check("user-facing text guides them",
+              "eats" in resp.text.lower() or "lives" in resp.text.lower())
 
     print("\n=== test 6: BlurbStore raises on missing schema ===")
     bad_conn = sqlite3.connect(":memory:")

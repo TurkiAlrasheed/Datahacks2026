@@ -69,7 +69,7 @@ def build_pipeline(
     blurb_store = BlurbStore(conn)
 
     # LLM backend
-    from eval_e2e import LlamaCppBackend, OllamaBackend
+    from llm_backends import LlamaCppBackend, OllamaBackend
     if backend == "ollama":
         llm = OllamaBackend(
             model=model,
