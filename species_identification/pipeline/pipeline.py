@@ -86,13 +86,24 @@ MSG_SPECIES_NOT_FOUND = (
 # it", "how rare is this in movies" — which are wildlife-adjacent enough
 # to pass the gate but not real field-guide questions.
 MSG_INTENT_UNCLEAR = (
-    "I'm not sure I understand. Try asking what it eats, where it lives, "
+    "I'm not sure I understand, I am limited to questions about the wildlife."
+    "Try asking what it eats, where it lives, "
     "whether it's dangerous, or something along those lines."
 )
 MSG_LLM_ERROR = (
     "Sorry, I had trouble answering that. Please try again."
 )
 
+# Intents whose answer can be served verbatim from a blurb field, no LLM
+# needed. 
+DIRECT_ROUTE_INTENTS = frozenset({
+    Intent.DANGER,
+    Intent.DIET,
+    Intent.SIZE,
+    Intent.HABITAT,
+    Intent.BEHAVIOR,
+    Intent.DESCRIPTION,   # -> appearance + notable
+})
 
 # ---------------------------------------------------------------------------
 # Protocols (structural typing — any object with these methods works)
@@ -112,6 +123,7 @@ ResponsePath = Literal[
     "gate_rejected",
     "species_not_found",
     "intent_unclear",
+    "blurb_direct",
     "blurb_only",
     "blurb_plus_chunks",
     "llm_error",
@@ -188,6 +200,7 @@ class RoboRangerPipeline:
         # 1. Wildlife gate
         t = time.perf_counter()
         gate_result = self.gate.check(query)
+        print(gate_result)
         latency["gate"] = time.perf_counter() - t
         if gate_result.reject:
             latency["total"] = time.perf_counter() - t0
@@ -242,11 +255,49 @@ class RoboRangerPipeline:
                 blurb=blurb,
                 latency=latency,
             )
+        
+        # 3a. Direct-field routing. If the intent is high-confidence and maps
+        # to a blurb field, format the field directly and skip retrieval +
+        # LLM entirely. Sub-millisecond instead of 12+ seconds. Falls
+        # through to the LLM path when the formatter returns None (missing
+        # field, or formatter decides the question needs synthesis).
+        if (
+            intent_result.confidence == "high"
+            and intent_result.intent in DIRECT_ROUTE_INTENTS
+        ):
+            t = time.perf_counter()
+            direct_text = self._format_from_blurb(intent_result.intent, blurb)
+            latency["format"] = time.perf_counter() - t
+            if direct_text is not None:
+                latency["total"] = time.perf_counter() - t0
+                return Response(
+                    text=direct_text,
+                    path="blurb_direct",
+                    species_id=species_id,
+                    query=query,
+                    gate=gate_result,
+                    intent=intent_result,
+                    blurb=blurb,
+                    latency=latency,
+                )
 
         # 4. Retrieval + threshold filter.
         t = time.perf_counter()
         chunks, dropped = self._retrieve_filtered(species_id, query)
         latency["retrieval"] = time.perf_counter() - t
+
+        if not chunks and intent_result.confidence != "high":
+            latency["total"] = time.perf_counter() - t0
+            return Response(
+                text=MSG_INTENT_UNCLEAR,
+                path="intent_unclear",
+                species_id=species_id,
+                query=query,
+                gate=gate_result,
+                intent=intent_result,
+                blurb=blurb,
+                latency=latency,
+            )
 
         # 5. Prompt assembly.
         t = time.perf_counter()
@@ -325,3 +376,44 @@ class RoboRangerPipeline:
                 source=category or "",
             ))
         return kept, dropped
+    
+    def _format_from_blurb(self, intent: Intent, blurb: Blurb) -> str | None:
+        """
+        Return a templated answer from blurb fields, or None to fall through
+        to the LLM. Each formatter decides for itself whether the blurb has
+        enough information to answer directly. Keep these formatters dumb —
+        no synthesis, no inference, just field lookup + sentence templating.
+        """
+        # Stubs for now. Real implementations come next; returning None
+        # everywhere means this routing change is a no-op for output but
+        # exercises the new code path.
+        formatters = {
+            Intent.DANGER:      self._format_danger,
+            Intent.DIET:        self._format_diet,
+            Intent.SIZE:        self._format_size,
+            Intent.HABITAT:     self._format_habitat,
+            Intent.BEHAVIOR:    self._format_behavior,
+            Intent.DESCRIPTION: self._format_description,
+        }
+        fn = formatters.get(intent)
+        return fn(blurb) if fn else None
+
+    # Stubs — return None so everything falls through to the LLM. Replace
+    # one at a time and watch the path counts shift in --profile output.
+    def _format_danger(self, blurb: Blurb) -> str | None:
+        return "DEBUG: routed direct danger"
+
+    def _format_diet(self, blurb: Blurb) -> str | None:
+        return "DEBUG: routed direct diet"
+    
+    def _format_size(self, blurb: Blurb) -> str | None:
+        return "DEBUG: routed direct size"
+
+    def _format_habitat(self, blurb: Blurb) -> str | None:
+        return "DEBUG: routed direct habitat"
+
+    def _format_behavior(self, blurb: Blurb) -> str | None:
+        return "DEBUG: routed direct behavior"
+
+    def _format_description(self, blurb: Blurb) -> str | None:
+        return "DEBUG: routed direct description"

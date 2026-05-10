@@ -14,7 +14,7 @@ Examples:
       --query "is it venomous?"
 
   # Uno Q deployment
-  python run_pipeline.py --backend llama-cpp --db /opt/roboranger/corpus.db \\
+  python run_pipeline.py --backend llama-cpp --db corpus.db \\
       --species Marah_macrocarpa --repl
 
   # Latency profile (50 queries from a file, p50/p95 per stage)
@@ -44,7 +44,7 @@ from pipeline import RoboRangerPipeline, Response
 # Stage order for the latency table — matches the order they run in
 # pipeline.answer(). Listed explicitly so the table is stable regardless
 # of dict insertion order, and so we can print "—" for skipped stages.
-STAGE_ORDER = ("gate", "blurb", "intent", "retrieval", "prompt", "llm", "total")
+STAGE_ORDER = ("gate", "blurb", "intent", "format", "retrieval", "prompt", "llm", "total")
 
 
 def fmt_ms(seconds: float | None) -> str:

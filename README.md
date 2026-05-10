@@ -31,6 +31,17 @@ MobileNetV3-Large running on Arduino, with web scraping for more images if neces
 
 must run build corpus before compile blurbs, because it tries to find the existing DB to add to it
 
+to run on Uno Q, must turn on llama.cpp server by running:
+```
+cd ~/llama.cpp/build/bin
+./llama-server -m ~/models/smollm2-360m.gguf \
+    --host 0.0.0.0 --port 8080 \
+    --ctx-size 4096 --threads 4 \
+    --chat-template chatml \
+    --cache-prompt
+```
+(made a symlink to model location; absolute location is /home/arduino/.cache/huggingface/hub/models--HuggingFaceTB--SmolLM2-360M-Instruct-GGUF/snapshots/593b5a2e04c8f3e4ee880263f93e0bd2901ad47f/smollm2-360m-instruct-q8_0.gguf)
+
 ### Future plans
 
 power increase + LLM local + slm for self-driving + check SME top floor for designing wheels

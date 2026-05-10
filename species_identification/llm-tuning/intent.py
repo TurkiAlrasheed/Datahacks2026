@@ -31,6 +31,7 @@ import numpy as np
 class Intent(str, Enum):
     DESCRIPTION = "description"      # "what does it look like", "tell me about it"
     DANGER = "danger"                # "is it venomous", "will it hurt me", "is it safe"
+    SIZE = "size"                    # "how big does it get", "what's its wingspan"
     DIET = "diet"                    # "what does it eat", "is it a predator"
     HABITAT = "habitat"              # "where does it live", "what's its range"
     BEHAVIOR = "behavior"            # "is it aggressive", "is it nocturnal", "how does it hunt"
@@ -59,6 +60,15 @@ PROTOTYPES: dict[Intent, list[str]] = {
         "is it safe to approach",
         "can it bite",
         "should I be worried about this animal",
+    ],
+    Intent.SIZE: [
+        "how big is it",
+        "how big does it get",
+        "how large does it grow",
+        "what size is it",
+        "how tall is it",
+        "how long does it get",
+        "how heavy is it",
     ],
     Intent.DIET: [
         "what does it eat",

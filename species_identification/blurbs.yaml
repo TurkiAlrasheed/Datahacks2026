@@ -217,6 +217,7 @@ blurbs:
     size: 0.3-1.8 m tall, 0.3-2.5 m wide
     appearance: small, leathery, needle-like green leaves with woolly undersides that are clustered on stems with 
       dense clusters of white-to-pink flowers that dry to a rusty-red
+    habitat: dry slopes, in canyons, and along washes in coastal sage scrub, chaparral, and desert environments
     diet: none (photosynthesis)
     behavior: none 
     notable: most important native source of honey in California
@@ -229,6 +230,7 @@ blurbs:
     size: 1-10 cm tall, 10-100 cm wide
     appearance: low-growing, prostrate annual weed that forms dense mats; thin, branching, and often reddish or maroon stems that stay 
       close to the ground but spread radially, with oblong, dark green leaves.
+    habitat: disturbed, open, and sunny habitats across North America, commonly found in sidewalk cracks, gardens, agricultural areas, and roadsides
     diet: none (photosynthesis)
     behavior: none
     notable: contains triterpenoids with anti-inflammatory and anti-proliferative properties
@@ -242,6 +244,7 @@ blurbs:
     size: 5-30 cm tall, 20 cm wide
     appearance: small, erect annual herb; erect, smooth, often reddish-green stems the base, with leaves that are
       oval-shaped with rounded tips and smooth edges
+    habitat: cultivated gardens, farmlands, vegetable patches, and urban waste areas, such as gardens, landscaped yards, and flowerbeds.
     diet: none (photosynthesis)
     behavior: none
     notable: has been linked to the virtual elimination of squamous cell skin cancer in Germany
@@ -256,6 +259,7 @@ blurbs:
     size: 2-5 cm tall, 30-60 cm wide
     appearance: prostrate, mat-forming annual herb with smooth, reddish-green stems; leaves are light green to 
       yellowish-green on top and pale grayish-green underneath oposite, simple, and broadly oval to oblong
+    habitat: full sun, disturbed sites, and dry to moist sandy, loamy, or clay soils, such as gardens, roadsides, crop fields, streambanks, and urban environments
     diet: none (photosynthesis)
     behavior: none
     notable: It creeps along the ground like a snake, rooting at its nodes to create dense mats, which is why it is called "creeping spurge"
@@ -435,6 +439,8 @@ blurbs:
     dangerous_to_pets: "no"
     size: 35-50 cm body length, 13-23 cm tail length, 280-740 g weight
     appearance: grayish-brown fur with white speckles, bushy tail, and a white ring around each eye
+    habitat: open areas, grasslands, chaparral, oak woodlands, and disturbed sites like roadsides, pastures, and 
+      parks across California, western Oregon, southwestern Washington, and Baja California
     diet: seeds, grains, nuts, fruits, insects, roots
     behavior: hibernate in colder parts of range; active year-round in warmer areas; estivate
       for short periods during hot summers
@@ -488,6 +494,7 @@ blurbs:
     dangerous_to_pets: "yes"
     size: 40-70 cm body length, 19-40 cm tail length, 2-10 kg weight
     appearance: grayish-brown fur with a distinctive black "mask" around the eyes and a bushy, ringed tail, extremely dexterous front paws
+    habitat: highly adaptable, preferring moist woodland areas, riparian zones, and swamps, but frequently inhabits urban, suburban, and agricultural areas
     diet: omnivorous, a mix of plants (berries, nuts, fruits, corn), invertebrates (crayfish, insects), and small vertebrates (frogs, rodents, bird eggs), 
       with human garbage, pet food, and carrion
     behavior: usually nocturnal; they "wash" their food by dipping it in water or rub them together before eating
