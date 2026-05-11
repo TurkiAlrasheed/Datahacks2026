@@ -113,6 +113,14 @@ class Blurb:
     # Extras
     notable: str | None = None
 
+    # Prose versions for direct-route formatters.
+    size_prose: str | None = None
+    appearance_prose: str | None = None
+    behavior_prose: str | None = None
+    notable_prose: str | None = None
+    diet_prose: str | None = None
+    prose_reviewed: bool = False
+
     def __post_init__(self) -> None:
         for field_name in ("dangerous_to_humans", "dangerous_to_pets"):
             v = getattr(self, field_name)

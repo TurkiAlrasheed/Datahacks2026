@@ -400,20 +400,140 @@ class RoboRangerPipeline:
 
     # Stubs — return None so everything falls through to the LLM. Replace
     # one at a time and watch the path counts shift in --profile output.
+    # ----- direct-routing formatters ---------------------------------------
+    #
+    # Each formatter takes a Blurb and returns either:
+    #   - a complete sentence answer (the field-direct path)
+    #   - None (caller falls through to retrieval + LLM)
+    #
+    # Style: terse, factual, ranger voice — "You'll find X..." / "It eats Y."
+    # No "I think" hedges, no apologies, no padding. A blurb field is the
+    # source of truth; we're just wrapping it in a sentence shape.
+    #
+    # Capitalization in source fields is inconsistent (some sentence-cap,
+    # most lowercase). _decap() lowercases the first character so phrases
+    # paste cleanly into mid-sentence; values that appear at the start of
+    # a sentence get manually capitalized in the template.
+
+    @staticmethod
+    def _decap(s: str) -> str:
+        """Lowercase first character so a field reads naturally mid-sentence."""
+        return s[:1].lower() + s[1:] if s else s
+
+    @staticmethod
+    def _name(blurb: Blurb) -> str:
+        """Display name for templates. Falls back to scientific name."""
+        return blurb.common_name or blurb.species_id.replace("_", " ")
+
     def _format_danger(self, blurb: Blurb) -> str | None:
-        return "DEBUG: routed direct danger"
+        """
+        Combine human and pet danger into one sentence. Going field-direct
+        means we have to handle the four common combinations explicitly —
+        "no humans, yes pets" is a real and important case (e.g. owls,
+        hawks) that a single-field answer would miss.
+        """
+        h = blurb.dangerous_to_humans  # "no" | "mild" | "yes"
+        p = blurb.dangerous_to_pets
+        name = self._name(blurb)
+
+        # Most common case: harmless to both.
+        if h == "no" and p == "no":
+            return f"The {name} is not dangerous to humans or pets."
+
+        # Dangerous to one but not the other — the case worth being precise
+        # about. A user asking "is it venomous" who has a dog wants this.
+        if h == "no" and p == "yes":
+            return (f"The {name} is not dangerous to humans, but it can be "
+                    f"a threat to small pets.")
+        if h == "yes" and p == "no":
+            return (f"The {name} can be dangerous to humans. It's not known "
+                    f"to threaten pets.")
+
+        # Mild to both — bees, etc.
+        if h == "mild" and p == "mild":
+            return (f"The {name} can sting or bite if provoked, but it's not "
+                    f"seriously dangerous to humans or pets.")
+
+        # Anything with "yes" in it: lead with the strongest warning.
+        if h == "yes" or p == "yes":
+            who = []
+            if h == "yes": who.append("humans")
+            if p == "yes": who.append("pets")
+            if h == "mild" and "humans" not in who: who.insert(0, "humans (mildly)")
+            if p == "mild" and "pets" not in who: who.append("pets (mildly)")
+            return f"The {name} can be dangerous to {' and '.join(who)}. Keep your distance."
+
+        # Mild to one, no to the other.
+        if h == "mild":
+            return (f"The {name} can cause mild harm to humans if provoked. "
+                    f"It's not dangerous to pets.")
+        if p == "mild":
+            return (f"The {name} is not dangerous to humans. It may cause "
+                    f"mild harm to pets if they get too close.")
+
+        # Should be unreachable if blurb data is clean. Fall through to LLM.
+        return None
 
     def _format_diet(self, blurb: Blurb) -> str | None:
-        return "DEBUG: routed direct diet"
-    
-    def _format_size(self, blurb: Blurb) -> str | None:
-        return "DEBUG: routed direct size"
+        print(blurb.prose_reviewed, blurb.diet_prose)
+        if blurb.prose_reviewed and blurb.diet_prose:
+            return blurb.diet_prose
+        
+        diet = blurb.diet.strip()
+        name = self._name(blurb)
+
+        if "photosynthesis" in diet.lower():
+            return (f"The {name} doesn't eat in the way an animal does — "
+                    f"it makes its own food from sunlight, water, and "
+                    f"nutrients in the soil.")
+
+        # Animal diet: blurb field is a comma-separated list of foods.
+        return f"The {name} eats {self._decap(diet)}."
 
     def _format_habitat(self, blurb: Blurb) -> str | None:
-        return "DEBUG: routed direct habitat"
+        habitat = blurb.habitat.strip()
+        name = self._name(blurb)
+        return f"You'll find the {name} in {self._decap(habitat)}."
+
+    def _format_size(self, blurb: Blurb) -> str | None:
+        if blurb.prose_reviewed and blurb.size_prose:
+            return blurb.size_prose
+        # Fallback while prose isn't reviewed yet.
+        return f"The {self._name(blurb)} typically measures {self._decap(blurb.size)}."
 
     def _format_behavior(self, blurb: Blurb) -> str | None:
-        return "DEBUG: routed direct behavior"
+        if blurb.prose_reviewed and blurb.behavior_prose:
+            return blurb.behavior_prose
+        behavior = (blurb.behavior or "").strip()
+        if not behavior:
+            return None
+        return f"The {self._name(blurb)} is {self._decap(behavior)}."
 
     def _format_description(self, blurb: Blurb) -> str | None:
-        return "DEBUG: routed direct description"
+        # Description synthesizes appearance + size + notable. Prefer prose
+        # for each piece when available; mix-and-match is fine because each
+        # prose sentence is self-contained.
+        if blurb.prose_reviewed:
+            parts = []
+            if blurb.appearance_prose:
+                parts.append(blurb.appearance_prose)
+            if blurb.size_prose:
+                parts.append(blurb.size_prose)
+            if blurb.notable_prose:
+                parts.append(blurb.notable_prose)
+            if parts:
+                return " ".join(parts)
+        # Fallback: structural template across the three fields.
+        appearance = (blurb.appearance or "").strip()
+        size = (blurb.size or "").strip()
+        notable = (blurb.notable or "").strip()
+        if not appearance:
+            return None
+        parts = [
+            f"The {self._name(blurb)} has {self._decap(appearance)}",
+            f"and typically measures {self._decap(size)}." if size
+                else f"{self._decap(appearance)}.",
+        ]
+        if notable:
+            parts.append(f"Notably, {self._decap(notable)}.")
+        return " ".join(parts)

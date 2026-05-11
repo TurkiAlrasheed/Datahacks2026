@@ -56,6 +56,11 @@ JSON_KEY_TO_FIELD: dict[str, str] = {
     "dangerous_to_humans": "dangerous_to_humans",
     "dangerous_to_pets":   "dangerous_to_pets",
     "notable":             "notable",
+    "size_prose":          "size_prose",
+    "appearance_prose":    "appearance_prose",
+    "behavior_prose":      "behavior_prose",
+    "diet_prose":          "diet_prose",
+    "notable_prose":       "notable_prose",
 }
 
 # Required columns on the species table for this store to work.
@@ -138,6 +143,7 @@ class BlurbStore:
                 )
 
         # Map JSON keys to dataclass fields.
+        prose_reviewed = bool(parsed.get("prose_reviewed", False))
         data: dict[str, str | None] = {}
         for json_key, value in parsed.items():
             field = JSON_KEY_TO_FIELD.get(json_key)
@@ -165,7 +171,11 @@ class BlurbStore:
         if not data.get("common_name"):
             data["common_name"] = scientific_name
 
-        return Blurb(scientific_name=scientific_name, **data)
+        return Blurb(
+            scientific_name=scientific_name,
+            prose_reviewed=prose_reviewed,
+            **data,
+        )
 
     def exists(self, species_id: str) -> bool:
         row = self.conn.execute(

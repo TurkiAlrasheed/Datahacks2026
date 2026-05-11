@@ -3,146 +3,271 @@ blurbs:
     reviewed: true
     source: wikipedia:Allograpta obliqua
     common_name: oblique streaktail hoverfly
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 6-9 mm body length
-    appearance: black and yellow striped abdomen and thorax, clear wings with dark veins, large compound eyes
+    appearance: black and yellow striped abdomen and thorax, clear wings with dark veins,
+      large compound eyes
     habitat: gardens, meadows, agricultural fields across North America
     diet: adults eat nectar and pollen, larvae eat aphids - a sap-sucking insect
     behavior: males have holoptic eyes, females dichoptic
-    notable: they are hyperfocused when on a flower, ignoring cameras and fingers getting close
+    notable: they are hyperfocused when on a flower, ignoring cameras and fingers getting
+      close
+    size_prose: The oblique streaktail hoverfly is 6 to 9 millimeters long.
+    appearance_prose: The oblique streaktail hoverfly has a black-and-yellow striped abdomen
+      and thorax, clear wings with dark veins, and large compound eyes.
+    behavior_prose: The oblique streaktail hoverfly has males with holoptic eyes and females
+      with dichoptic eyes.
+    notable_prose: The orchid bee is hyperfocused when on a flower, ignoring cameras and fingers
+      getting close.
+    prose_reviewed: true
+    diet_prose: The oblique streaktail hoverfly adults eat nectar and pollen, while their
+      larvae eat aphids, which are sap-sucking insects.
   Apis_mellifera:
     reviewed: true
     source: wikipedia:Western honey bee
     common_name: Western honey bee
-    dangerous_to_humans: "mild"
-    dangerous_to_pets: "mild"
+    dangerous_to_humans: mild
+    dangerous_to_pets: mild
     size: 12-20 mm body length, 10-20 mm wingspan
     appearance: Dark brown striped bodies with hairy legs
     habitat: Every continent except Antarctica; adapted to local environments
     diet: Nectar, pollen, honey
     behavior: Dirunal, eusocial, complex communication through pheromones and waggle dance
-    notable: With 170 odorant receptors, they have a sense of smell 50 times more powerful than a dog
+    notable: With 170 odorant receptors, they have a sense of smell 50 times more powerful
+      than a dog
+    size_prose: The Western honey bee measures 12 to 20 millimeters in body length and has
+      a wingspan of 10 to 20 millimeters.
+    appearance_prose: The striped harvestman has dark brown striped bodies with hairy legs.
+    behavior_prose: The Western honey bee is diurnal, eusocial, and communicates complexly
+      through pheromones and waggle dance.
+    notable_prose: The bloodhound has a sense of smell 50 times more powerful than a dog with
+      170 odorant receptors.
+    prose_reviewed: true
+    diet_prose: The Western honey bee feeds on nectar, pollen, and honey.
   Artemisia_californica:
     reviewed: true
     source: wikipedia:Artemisia californica
     common_name: California sagebrush
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 1-2 m tall, 1-2 m wide
-    appearance: slender, flexible, gray-green fuzzy stems with a fragrant smell 
-    habitat: coastal sage scrub, chaparral, and dry foothill communities in western and Baja California
-    diet: sunlight, water, nutrients from soil
+    appearance: slender, flexible, gray-green fuzzy stems with a fragrant smell
+    habitat: coastal sage scrub, chaparral, and dry foothill communities in western and Baja
+      California
+    diet: none (photosynthesis)
     behavior: provides good cover for smaller birds and other animals; allelopathic, secreting
       chemicals to inhibit other plants
     notable: contains terpenes making it aromatic, used in medicine and rituals by indigenous
       groups, and was coined the cowboy cologne
+    size_prose: The California sagebrush can grow up to 1 to 2 meters in height and 1 to 2
+      meters in width.
+    appearance_prose: The California sagebrush has slender, flexible, gray-green fuzzy stems
+      with a fragrant smell.
+    behavior_prose: The California sagebrush provides good cover for smaller birds and animals,
+      and is allelopathic — it secretes chemicals that inhibit other plants.
+    notable_prose: The sagebrush contains terpenes making it aromatic, used in medicine and
+      rituals by indigenous groups, and was coined the cowboy cologne.
+    prose_reviewed: true
+    diet_prose: The prickly pear cactus obtains its nutrients through photosynthesis.
   Bombus_vosnesenskii:
     reviewed: true
     source: wikipedia:Bombus vosnesenskii
     common_name: Yellow-faced bumblebee
-    dangerous_to_humans: "mild"
-    dangerous_to_pets: "mild"
+    dangerous_to_humans: mild
+    dangerous_to_pets: mild
     size: 8-21 mm body length
     appearance: Black body with yellow face and thorax; short, even hair, and a square face
-    habitat: coastal areas and meadows in western North America, from British Columbia to California
+    habitat: coastal areas and meadows in western North America, from British Columbia to
+      California
     diet: nectar and pollen from various plants
     behavior: loud foragers, with a high-pitched buzzing sound
-    notable: they pollinate tomatoes better than humans, as they can perform 'buzz pollination' by vibrating their 
-      flight muscles to release pollen from flowers
+    notable: they pollinate tomatoes better than humans, as they can perform 'buzz pollination'
+      by vibrating their flight muscles to release pollen from flowers
+    size_prose: The Yellow-faced bumblebee measures 8 to 21 millimeters in length.
+    appearance_prose: The Yellow-faced bumblebee has a black body with a yellow face and thorax,
+      short, even hair, and a square face.
+    behavior_prose: The Yellow-faced bumblebee is a loud forager that makes a high-pitched
+      buzzing sound.
+    notable_prose: The yellow-faced bumblebee pollinates tomatoes better than humans by performing
+      buzz pollination — vibrating its flight muscles to release pollen from flowers.
+    prose_reviewed: true
+    diet_prose: The Yellow-faced bumblebee feeds on nectar and pollen from various plants.
   Bubo_virginianus:
     reviewed: true
     source: wikipedia:Great horned owl
     common_name: Great horned owl
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'yes'
     size: 43-64 cm length, 91-153 cm wingspan, 1-2.5 kg weight
-    appearance: large, mottled gray-brown owl with prominent ear tufts. yellow eyes, and a white patch on the throat
-    habitat: wide range of habitats across the Americas, including forests, deserts, swamps, and urban areas
-    diet: rabbits, hares, rats, mice, voles; also skunks, rodents, larger mammals, birds, reptiles,
-      amphibians, invertebrates
+    appearance: large, mottled gray-brown owl with prominent ear tufts. yellow eyes, and a
+      white patch on the throat
+    habitat: wide range of habitats across the Americas, including forests, deserts, swamps,
+      and urban areas
+    diet: rabbits, hares, rats, mice, voles; also skunks, rodents, larger mammals, birds,
+      reptiles, amphibians, invertebrates
     behavior: nocturnal, solitary
-    notable: they have a poor sense of smell, but can hear sounds from 10 miles away and see in much dimmer light than humans
+    notable: they have a poor sense of smell, but can hear sounds from 10 miles away and see
+      in much dimmer light than humans
+    size_prose: The great horned owl measures 43 to 64 centimeters in length, with a wingspan
+      of 91 to 153 centimeters and a weight of 1 to 2.5 kilograms.
+    appearance_prose: The great horned owl is a large, mottled gray-brown bird with prominent
+      ear tufts, yellow eyes, and a white patch on its throat.
+    behavior_prose: The Great horned owl is nocturnal and solitary.
+    notable_prose: The great horned owl has a poor sense of smell, but it can hear sounds
+      from 10 miles away and see in much dimmer light than humans.
+    prose_reviewed: true
+    diet_prose: The great grey owl preys on rabbits, hares, rats, mice, voles, skunks, rodents,
+      larger mammals, birds, reptiles, amphibians, and invertebrates.
   Buteo_lineatus:
     reviewed: true
     source: wikipedia:Red-shouldered hawk
     common_name: Red-shouldered hawk
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'yes'
     size: 43-61 cm length, 90-127 cm wingspan, 0.5-1 kg weight
-    appearance: reddish-brown underparts, dark and white checkered back and wings,
-      long tail with narrow white bands
-    habitat: deciduous or mixed deciduous-conifer forests, favoring areas with high canopy closure and close proximity to water, 
-      such as swamps, flooded forests, and riparian zone
+    appearance: reddish-brown underparts, dark and white checkered back and wings, long tail
+      with narrow white bands
+    habitat: deciduous or mixed deciduous-conifer forests, favoring areas with high canopy
+      closure and close proximity to water, such as swamps, flooded forests, and riparian
+      zone
     diet: small mammals, birds, rabbits, reptiles, amphibians
-    behavior: loud, repeating, high-pitched call; pale, crescent-shaped patches near the wingtips when soaring
-    notable: known for flying upside down during courtship and sometinmes steal food from other raptors in midair
+    behavior: loud, repeating, high-pitched call; pale, crescent-shaped patches near the wingtips
+      when soaring
+    notable: known for flying upside down during courtship and sometinmes steal food from
+      other raptors in midair
+    size_prose: The Red-shouldered hawk measures 43 to 61 centimeters in length, with a wingspan
+      of 90 to 127 centimeters and a weight of 0.5 to 1 kilograms.
+    appearance_prose: The Red-shouldered hawk has reddish-brown underparts, a dark and white
+      checkered back and wings, and a long tail with narrow white bands.
+    behavior_prose: The Red-shouldered hawk has a loud, repeating, high-pitched call and pale,
+      crescent-shaped patches near the wingtips when soaring.
+    notable_prose: The Red-shouldered hawk is known for flying upside down during courtship
+      and sometimes stealing food from other raptors in midair.
+    prose_reviewed: true
+    diet_prose: The Red-shouldered hawk preys on small mammals, birds, rabbits, reptiles,
+      and amphibians.
   Calypte_anna:
     reviewed: true
     source: wikipedia:Anna's hummingbird
     common_name: Anna's hummingbird
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 9.9-10.9 cm body length, 12 cm wingspan, 3-6 g weight
-    appearance: Iridescent bronze-green back, pale grey chest and belly, emerald-green feathers; male
-      has iridescent crimson-red crown and gorget.
+    appearance: Iridescent bronze-green back, pale grey chest and belly, emerald-green feathers;
+      male has iridescent crimson-red crown and gorget.
     habitat: Western coastal regions of North America, including residential areas, parks,
       and backyards with feeders and flowering plants.
     diet: Nectar from flowers, small insects, other arthropods
     behavior: Anna's hummingbirds hold their tails still while hovering
     notable: Male has the only red crown among North American hummingbird species.
+    size_prose: The Anna's hummingbird measures 9.9 to 10.9 centimeters in body length, has
+      a wingspan of 12 centimeters and weighs 3 to 6 grams.
+    appearance_prose: The Anna's hummingbird is an iridescent bronze-green bird with a pale
+      grey chest and belly, emerald-green feathers, and in males, an iridescent crimson-red
+      crown and gorget.
+    behavior_prose: The Anna's hummingbird holds its tail still while hovering.
+    notable_prose: The Anna's hummingbird is unique among North American hummingbird species
+      in that its male has a distinctive red crown.
+    prose_reviewed: true
+    diet_prose: The Anna's hummingbird feeds on nectar from flowers, small insects, and other
+      arthropods.
   Canis_latrans:
     reviewed: true
     source: wikipedia:Coyote
     common_name: Coyote
-    dangerous_to_humans: "yes"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'yes'
+    dangerous_to_pets: 'yes'
     size: 8-23 kg body weight, 1.0-1.35 m total length, 0.6 m standing height
-    appearance: Light gray and red or dull-orange fur, interspersed with black and white; short,
-      soft underfur and long, coarse guard hairs; bushy, black-tipped tail
+    appearance: Light gray and red or dull-orange fur, interspersed with black and white;
+      short, soft underfur and long, coarse guard hairs; bushy, black-tipped tail
     habitat: Open plains and arid regions of North America, adaptable to urban environments
     diet: Primarily carnivorous, eating deer, rabbits, hares, rodents, birds, reptiles, amphibians,
       fish, and invertebrates; adapts to eat fruits and vegetables when necessary
-    behavior: opportunistic hunters, may shadow people out of curiosity; primarily nocturnal, with a characteristic
-      howl that changes rapidly in tone and pitch, adaptable to various environments
-    notable: They can run up to 43 mph, jump over 13 feet, and sometimes form hunting partnerships with badgers;
-      known as the "song dog" because they use 11 different sounds to communicate
+    behavior: opportunistic hunters, may shadow people out of curiosity; primarily nocturnal,
+      with a characteristic howl that changes rapidly in tone and pitch, adaptable to various
+      environments
+    notable: They can run up to 43 mph, jump over 13 feet, and sometimes form hunting partnerships
+      with badgers; known as the "song dog" because they use 11 different sounds to communicate
+    size_prose: The okapi weighs between 8 and 23 kilograms, measures 1 to 1.35 meters in
+      total length, and stands at a height of 0.6 meters.
+    appearance_prose: The Arctic fox is light gray and red or dull-orange, interspersed with
+      black and white, has short, soft underfur and long, coarse guard hairs, and a bushy,
+      black-tipped tail.
+    behavior_prose: The Coyote is an opportunistic hunter who may shadow people out of curiosity,
+      is primarily nocturnal, makes a howl with a characteristic rapid change in tone and
+      pitch, and is adaptable to various environments.
+    notable_prose: The Coyote can run up to 43 mph, jump over 13 feet, and sometimes form
+      hunting partnerships with badgers; known as the 'song dog' because they use 11 different
+      sounds to communicate.
+    prose_reviewed: true
+    diet_prose: The coyote is primarily carnivorous, eating deer, rabbits, hares, rodents,
+      birds, reptiles, amphibians, fish, and invertebrates; adapts to eat fruits and vegetables
+      when necessary.
   Corvus_corax:
     reviewed: true
     source: wikipedia:Common raven
     common_name: Common raven
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'yes'
     size: 54-69 cm length, 115-150 cm wingspan, 0.7-1.63 kg weight
-    appearance: All-black passerine bird with little variation in appearance; heavy, curved beak, shaggy throat feathers;
-      larger than a crow, with a more robust bill and wedge-shaped tail
-    habitat: Found across the Northern Hemisphere; common in various habitats including forests, tundras, and coastal 
-      cliffs, thriving in open landscapes and urban areas.
+    appearance: All-black passerine bird with little variation in appearance; heavy, curved
+      beak, shaggy throat feathers; larger than a crow, with a more robust bill and wedge-shaped
+      tail
+    habitat: Found across the Northern Hemisphere; common in various habitats including forests,
+      tundras, and coastal cliffs, thriving in open landscapes and urban areas.
     diet: Omnivorous diet including carrion, insects, cereal grains, berries, fruit, small
       animals, nesting birds, and food waste
-    behavior: They produce a deep, resonant "prruk-prruk" or "gronk" call; deeper than a crow's caw; 
-      known for their problem-solving skills and playful nature
-    notable: Known to break off twigs to play with other ravens; they mate for life, with partners known to serenade each other.
+    behavior: They produce a deep, resonant "prruk-prruk" or "gronk" call; deeper than a crow's
+      caw; known for their problem-solving skills and playful nature
+    notable: Known to break off twigs to play with other ravens; they mate for life, with
+      partners known to serenade each other.
+    size_prose: The Common raven measures 54 to 69 centimeters in length, with a wingspan
+      of 115 to 150 centimeters and a weight of 0.7 to 1.63 kilograms.
+    appearance_prose: The Common raven is an all-black passerine bird with little variation
+      in appearance, a heavy, curved beak, shaggy throat feathers, larger than a crow, and
+      a more robust bill and wedge-shaped tail.
+    behavior_prose: The Common raven produces a deep, resonant 'prruk-prruk' or 'gronk' call
+      that is deeper than a crow's caw, and is known for its problem-solving skills and playful
+      nature.
+    notable_prose: The Common raven is known to break off twigs to play with other ravens
+      and even mates for life, with partners that serenade each other.
+    prose_reviewed: true
+    diet_prose: The Common raven has an omnivorous diet that includes carrion, insects, cereal
+      grains, berries, fruit, small animals, nesting birds, and food waste.
   Cotinis_mutabilis:
     reviewed: true
     source: wikipedia:Figeater beetle
     common_name: Figeater beetle
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 17-34 mm long, 10-19 mm wide, has elytra (wing covers)
-    appearance: Velvety, metallic-green back with yellowish or tan margins along the wing covers.
-    habitat: southwestern US and Mexico; warm, sunny areas like gardens, orchards, and urban landscapes
+    appearance: Velvety, metallic-green back with yellowish or tan margins along the wing
+      covers.
+    habitat: southwestern US and Mexico; warm, sunny areas like gardens, orchards, and urban
+      landscapes
     diet: fruit, nectar, pollen, sap; larvae eat decomposing organic matter
-    behavior: active during daylight hours, congregates in shade to find mates; makes a buzzing noise similar to small 
-      helicopters when flying
-    notable: When handled, they might play dead briefly, but they do not bite or sting; they are not particularly skilled fliers 
-      and frequently "crash-land" 
+    behavior: active during daylight hours, congregates in shade to find mates; makes a buzzing
+      noise similar to small helicopters when flying
+    notable: When handled, they might play dead briefly, but they do not bite or sting; they
+      are not particularly skilled fliers and frequently "crash-land"
+    size_prose: The Figeater beetle is 17 to 34 millimeters long and 10 to 19 millimeters
+      wide.
+    appearance_prose: The Figeater beetle has a velvety, metallic-green back with yellowish
+      or tan margins along its wing covers.
+    behavior_prose: The Figeater beetle is active during daylight hours, congregates in shade
+      to find mates, and makes a buzzing noise similar to that of small helicopters when flying.
+    notable_prose: The Figeater beetle is known to play dead briefly when handled, but it
+      does not bite or sting, and it is also a relatively poor flier that often crash-lands.
+    prose_reviewed: true
+    diet_prose: The Figeater beetle feeds on fruit, nectar, pollen, and sap; its larvae consume
+      decomposing organic matter.
   Cycloneda_sanguinea:
     reviewed: true
     source: wikipedia:Cycloneda sanguinea
     common_name: spotless lady beetle
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 4-6.5 mm long, elytra (wing covers)
     appearance: red, unspotted elytra; white and black marks on the head and pronotum
     habitat: plant-dense landscapes in Americas, from southern US to Argentina, eastward to
@@ -150,125 +275,233 @@ blurbs:
     diet: aphids (commonly on milkweeds), pollen and nectar
     behavior: dirunal, but attracted to lights; pupae have gin trap mechanism for predator
       defense
-    notable: When threatened as adults, they display warning coloration and perform "reflex bleeding," 
-      releasing a bitter, sticky yellow fluid from their leg joints toxic to non-human predators
+    notable: When threatened as adults, they display warning coloration and perform "reflex
+      bleeding," releasing a bitter, sticky yellow fluid from their leg joints toxic to non-human
+      predators
+    size_prose: The spotless lady beetle is 4 to 6.5 millimeters long.
+    appearance_prose: The red-bellied click beetle has red, unspotted elytra, and white and
+      black marks on its head and pronotum.
+    behavior_prose: The seven-spotted lady beetle is diurnal, but attracted to lights, and
+      its pupae have a gin trap mechanism for predator defense.
+    notable_prose: The lady beetle displays warning coloration and performs reflex bleeding
+      when threatened as adults, releasing a bitter, sticky yellow fluid from its leg joints
+      that is toxic to non-human predators.
+    prose_reviewed: true
+    diet_prose: The spotless lady beetle feeds on aphids, commonly found on milkweeds, and
+      also consumes pollen and nectar.
   Danaus_plexippus:
     reviewed: true
     source: wikipedia:Monarch butterfly
     common_name: Monarch butterfly
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'yes'
     size: 7-12 cm long, 2.5-3.5 cm wingspan
-    appearance: vibrant orange wings, bold black veins, and a thick black border filled with small white spots
-    habitat: open, sunny areas across North America, like  meadows, grasslands, or urban gardens; worldwide in places
-      with milkweed plants like Hawaii, Australia, New Zealand, Spain, and Pacific Islands
-    diet: adults feed on nectar from various flowers, while larvae feed exclusively on milkweed leaves
+    appearance: vibrant orange wings, bold black veins, and a thick black border filled with
+      small white spots
+    habitat: open, sunny areas across North America, like  meadows, grasslands, or urban gardens;
+      worldwide in places with milkweed plants like Hawaii, Australia, New Zealand, Spain,
+      and Pacific Islands
+    diet: adults feed on nectar from various flowers, while larvae feed exclusively on milkweed
+      leaves
     behavior: migrates thousands of miles annually
     notable: annual southward migration from northern and central United States to Florida
       and Mexico spanning across generations
+    size_prose: The Monarch butterfly measures 7 to 12 centimeters in length, with a wingspan
+      of 2.5 to 3.5 centimeters.
+    appearance_prose: The Monarch butterfly has vibrant orange wings, bold black veins, and
+      a thick black border filled with small white spots.
+    behavior_prose: The Arctic tern migrates thousands of miles annually.
+    notable_prose: The Monarch butterfly undertakes an annual southward migration from northern
+      and central United States to Florida and Mexico, a journey that spans multiple generations.
+    prose_reviewed: true
+    diet_prose: The Monarch butterfly adults feed on nectar from various flowers, while larvae
+      feed exclusively on milkweed leaves.
   Dione_vanillae:
     reviewed: true
     source: wikipedia:Gulf fritillary
     common_name: Gulf fritillary or Passion butterfly
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 2-3 cm long, 6.5-9.5 cm wingspan
-    appearance: intense, bright orange with black streaks and spots, underside brown and speckled with silvery
-      white dots.
+    appearance: intense, bright orange with black streaks and spots, underside brown and speckled
+      with silvery white dots.
     habitat: Open habitats, moderately sunny areas near open grasslands, parks, woodlands,
       butterfly gardens.
-    diet: nectar from flowers, including Lantana plants; larvae feed on passionflower vine leaves
-    behavior: preference for brightly colored flowers; fast, direct, and sometimes "rollicking" flight pattern, 
-      often seen navigating through gardens at high speed
-    notable: the Latin name is Dione vanillae, based on a 1705 painting of a caterpillar sitting on a vanilla plant, but they do not eat vanilla
+    diet: nectar from flowers, including Lantana plants; larvae feed on passionflower vine
+      leaves
+    behavior: preference for brightly colored flowers; fast, direct, and sometimes "rollicking"
+      flight pattern, often seen navigating through gardens at high speed
+    notable: the Latin name is Dione vanillae, based on a 1705 painting of a caterpillar sitting
+      on a vanilla plant, but they do not eat vanilla
+    size_prose: The Gulf fritillary or Passion butterfly is 2 to 3 centimeters in length and
+      has a wingspan of 6.5 to 9.5 centimeters.
+    appearance_prose: The Gulf fritillary or Passion butterfly is intense, bright orange with
+      black streaks and spots, its underside is brown and speckled with silvery white dots.
+    behavior_prose: The Gulf fritillary or Passion butterfly has a preference for brightly
+      colored flowers and exhibits a fast, direct, and sometimes rollicking flight pattern,
+      often seen navigating through gardens at high speed.
+    notable_prose: The Gulf fritillary or Passion butterfly's Latin name is Dione vanillae,
+      based on a 1705 painting of a caterpillar sitting on a vanilla plant, but they do not
+      eat vanilla.
+    prose_reviewed: true
+    diet_prose: The Gulf fritillary or Passion butterfly feeds on nectar from flowers, including
+      Lantana plants; its larvae feed on passionflower vine leaves.
   Diplacus_puniceus:
     reviewed: true
     source: wikipedia:Diplacus puniceus
     common_name: red bush monkeyflower
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 30-100 cm tall, 60-100 cm wide
-    appearance: tubular dark orange to red flowers; narrow, lance-shaped (linear), shiny, dark-green leaves
+    appearance: tubular dark orange to red flowers; narrow, lance-shaped (linear), shiny,
+      dark-green leaves
     habitat: coastal regions of Southern California and Baja California; granite outcrops,
       chaparral openings, open forests, and steep canyon slopes
     diet: none (photosynthesis)
-    behavior: none 
-    notable: similar to a Venus flytrap, the plant's stigma (center) will close upon being touched
+    behavior: none
+    notable: similar to a Venus flytrap, the plant's stigma (center) will close upon being
+      touched
+    size_prose: The red bush monkeyflower measures 30 to 100 centimeters in height and 60
+      to 100 centimeters in width.
+    appearance_prose: The California peony has tubular dark orange to red flowers and narrow,
+      lance-shaped (linear), shiny, dark-green leaves.
+    behavior_prose: The red bush monkeyflower has no notable behaviors.
+    notable_prose: The sensitive orchid has a stigma that closes upon being touched.
+    prose_reviewed: true
+    diet_prose: The prickly pear cactus obtains its nutrients by photosynthesis.
   Encelia_californica:
     reviewed: true
     source: wikipedia:Encelia californica
     common_name: California coast or bush sunflower
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
-    size: 60-150 cm tall, 90-200 cm wide  
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
+    size: 60-150 cm tall, 90-200 cm wide
     appearance: Bushy shrub with green, rounded diamond leaves and bright yellow ray florets
       around a center of protruding yellowish to purplish brown disc florets.
     habitat: Southern California; coastal sage plant community at shoreline, chaparral and
       woodlands on inland foothills in Transverse and Peninsular Ranges
     diet: none (photosynthesis)
     behavior: none
-    notable: The Tongva people mashed and boiled the leaves, stems, and flowers to create a pain-relieving paste for joints.
+    notable: The Tongva people mashed and boiled the leaves, stems, and flowers to create
+      a pain-relieving paste for joints.
+    size_prose: The California coast or bush sunflower grows 60 to 150 centimeters in height
+      and 90 to 200 centimeters in width.
+    appearance_prose: The California coast or bush sunflower is a bushy shrub with green,
+      rounded diamond leaves and bright yellow ray florets around a center of protruding yellowish
+      to purplish-brown disc florets.
+    behavior_prose: The California coast or bush sunflower has no notable behaviors.
+    notable_prose: The California coast or bush sunflower was used by the Tongva people to
+      create a pain-relieving paste for joints.
+    prose_reviewed: true
+    diet_prose: The prickly pear cactus obtains its nutrients through photosynthesis.
   Eriogonum_fasciculatum:
     reviewed: true
     source: wikipedia:Eriogonum fasciculatum
     common_name: California buckwheat
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 0.3-1.8 m tall, 0.3-2.5 m wide
-    appearance: small, leathery, needle-like green leaves with woolly undersides that are clustered on stems with 
-      dense clusters of white-to-pink flowers that dry to a rusty-red
-    habitat: dry slopes, in canyons, and along washes in coastal sage scrub, chaparral, and desert environments
+    appearance: small, leathery, needle-like green leaves with woolly undersides that are
+      clustered on stems with dense clusters of white-to-pink flowers that dry to a rusty-red
+    habitat: dry slopes, in canyons, and along washes in coastal sage scrub, chaparral, and
+      desert environments
     diet: none (photosynthesis)
-    behavior: none 
+    behavior: none
     notable: most important native source of honey in California
+    size_prose: The California buckwheat plant grows 0.3 to 1.8 meters tall and 0.3 to 2.5
+      meters wide.
+    appearance_prose: The California buckwheat has small, leathery, needle-like green leaves
+      with woolly undersides that are clustered on stems with dense clusters of white-to-pink
+      flowers that dry to a rusty-red.
+    behavior_prose: The California buckwheat has no notable behaviors.
+    notable_prose: The California buckwheat is most important native source of honey in California.
+    prose_reviewed: true
+    diet_prose: The prickly pear cactus obtains its nutrients through photosynthesis.
   Euphorbia_maculata:
     reviewed: true
     source: wikipedia:Euphorbia maculata
     common_name: Spotted Spurge
-    dangerous_to_humans: "yes"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'yes'
+    dangerous_to_pets: 'yes'
     size: 1-10 cm tall, 10-100 cm wide
-    appearance: low-growing, prostrate annual weed that forms dense mats; thin, branching, and often reddish or maroon stems that stay 
-      close to the ground but spread radially, with oblong, dark green leaves.
-    habitat: disturbed, open, and sunny habitats across North America, commonly found in sidewalk cracks, gardens, agricultural areas, and roadsides
+    appearance: low-growing, prostrate annual weed that forms dense mats; thin, branching,
+      and often reddish or maroon stems that stay close to the ground but spread radially,
+      with oblong, dark green leaves.
+    habitat: disturbed, open, and sunny habitats across North America, commonly found in sidewalk
+      cracks, gardens, agricultural areas, and roadsides
     diet: none (photosynthesis)
     behavior: none
     notable: contains triterpenoids with anti-inflammatory and anti-proliferative properties
       when medicinally applied
+    size_prose: The Spotted Spurge grows 1 to 10 centimeters in height and 10 to 100 centimeters
+      in width.
+    appearance_prose: The Spotted Spurge is a low-growing, prostrate annual weed that forms
+      dense mats; thin, branching, and often reddish or maroon stems that stay close to the
+      ground but spread radially, with oblong, dark green leaves.
+    behavior_prose: The Spotted Spurge has no notable behaviors.
+    notable_prose: The Spotted Spurge contains triterpenoids with anti-inflammatory and anti-proliferative
+      properties when medicinally applied.
+    prose_reviewed: true
+    diet_prose: The Spotted Spurge does not consume food because it performs photosynthesis.
   Euphorbia_peplus:
     reviewed: true
     source: wikipedia:Euphorbia peplus
     common_name: petty spurge
-    dangerous_to_humans: "yes"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'yes'
+    dangerous_to_pets: 'yes'
     size: 5-30 cm tall, 20 cm wide
-    appearance: small, erect annual herb; erect, smooth, often reddish-green stems the base, with leaves that are
-      oval-shaped with rounded tips and smooth edges
-    habitat: cultivated gardens, farmlands, vegetable patches, and urban waste areas, such as gardens, landscaped yards, and flowerbeds.
+    appearance: small, erect annual herb; erect, smooth, often reddish-green stems the base,
+      with leaves that are oval-shaped with rounded tips and smooth edges
+    habitat: cultivated gardens, farmlands, vegetable patches, and urban waste areas, such
+      as gardens, landscaped yards, and flowerbeds.
     diet: none (photosynthesis)
     behavior: none
     notable: has been linked to the virtual elimination of squamous cell skin cancer in Germany
       studies, and has approval from US FDA for treatment of actinic keratosis as a gel containing
       ingenol mebutate
+    size_prose: The petty spurge grows 5 to 30 centimeters in height and is 20 centimeters
+      in width.
+    appearance_prose: The small-flowered catchfly is a small, erect annual herb with erect,
+      smooth, often reddish-green stems at the base, and leaves that are oval-shaped with
+      rounded tips and smooth edges.
+    behavior_prose: The petty spurge has no behavior.
+    notable_prose: The noni plant has been linked to the virtual elimination of squamous cell
+      skin cancer in Germany studies, and has approval from US FDA for treatment of actinic
+      keratosis as a gel containing ingenol mebutate.
+    prose_reviewed: true
+    diet_prose: The petty spurge does not consume food because it performs photosynthesis.
   Euphorbia_serpens:
     reviewed: true
     source: wikipedia:Euphorbia serpens
     common_name: matted sandmat
-    dangerous_to_humans: "yes"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'yes'
+    dangerous_to_pets: 'yes'
     size: 2-5 cm tall, 30-60 cm wide
-    appearance: prostrate, mat-forming annual herb with smooth, reddish-green stems; leaves are light green to 
-      yellowish-green on top and pale grayish-green underneath oposite, simple, and broadly oval to oblong
-    habitat: full sun, disturbed sites, and dry to moist sandy, loamy, or clay soils, such as gardens, roadsides, crop fields, streambanks, and urban environments
+    appearance: prostrate, mat-forming annual herb with smooth, reddish-green stems; leaves
+      are light green to yellowish-green on top and pale grayish-green underneath oposite,
+      simple, and broadly oval to oblong
+    habitat: full sun, disturbed sites, and dry to moist sandy, loamy, or clay soils, such
+      as gardens, roadsides, crop fields, streambanks, and urban environments
     diet: none (photosynthesis)
     behavior: none
-    notable: It creeps along the ground like a snake, rooting at its nodes to create dense mats, which is why it is called "creeping spurge"
+    notable: It creeps along the ground like a snake, rooting at its nodes to create dense
+      mats, which is why it is called "creeping spurge"
+    size_prose: The matted sandmat grows 2 to 5 centimeters in height and is 30 to 60 centimeters
+      wide.
+    appearance_prose: The matted sandmat is a prostrate, mat-forming annual herb with smooth,
+      reddish-green stems; leaves are light green to yellowish-green on top and pale grayish-green
+      underneath, opposite, simple, and broadly oval to oblong.
+    behavior_prose: The matted sandmat has none.
+    notable_prose: The matted sandmat creeps along the ground like a snake, rooting at its
+      nodes to create dense mats.
+    prose_reviewed: true
+    diet_prose: The matted sandmat undergoes photosynthesis.
   Haemorhous_mexicanus:
     reviewed: true
     source: wikipedia:House finch
     common_name: House finch
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 12.5-15 cm long, with a wingspan of 20-25 cm (5-6 in and 8-10 in)
     appearance: Brown or dull-brown color across the back with some shading into deep gray
       on the wing feathers; reddish heads, necks and shoulders in males
@@ -277,13 +510,26 @@ blurbs:
     diet: Grains, seeds, berries, weed seeds (nettle and dandelion), small insects (aphids)
     behavior: Forage on the ground or in vegetation; frequent visitors to bird feeders throughout
       the year
-    notable: Male plumage ranges from bright crimson to yellow/orange depending on what they eat during their annual molt
+    notable: Male plumage ranges from bright crimson to yellow/orange depending on what they
+      eat during their annual molt
+    size_prose: The House finch measures 12.5 to 15 centimeters in length, with a wingspan
+      of 20 to 25 centimeters.
+    appearance_prose: The House finch has a brown or dull-brown color across its back with
+      some shading into deep gray on the wing feathers, and reddish heads, necks, and shoulders
+      in males.
+    behavior_prose: The House finch forages on the ground or in vegetation, and are frequent
+      visitors to bird feeders throughout the year.
+    notable_prose: The House finch's male plumage ranges from bright crimson to yellow/orange
+      depending on what they eat during their annual molt.
+    prose_reviewed: true
+    diet_prose: The House finch feeds on grains, seeds, berries, weed seeds (nettle and dandelion),
+      and small insects (aphids).
   Harmonia_axyridis:
     reviewed: true
     source: wikipedia:Harmonia axyridis
     common_name: Harlequin or Asian lady beetle
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 5.5-8.5mm in length
     appearance: Typical coccinellid beetle, domed with smooth transition between elytra, pronotum,
       and head. Common color form is orange or red with black spots.
@@ -292,25 +538,45 @@ blurbs:
     diet: Aphids and scale insects
     behavior: Voracious predator; reddish-brown legs and brown underside of abdomen
     notable: While many insects live for a few weeks, these beetles can live up to three years
+    size_prose: The Harlequin or Asian lady beetle is 5.5 to 8.5 millimeters in length.
+    appearance_prose: The Harlequin or Asian lady beetle is a typical coccinellid beetle,
+      domed with smooth transition between elytra, pronotum, and head, and has a common color
+      form that is orange or red with black spots.
+    behavior_prose: The Harlequin or Asian lady beetle is a voracious predator with reddish-brown
+      legs and a brown underside of its abdomen.
+    notable_prose: The Harlequin or Asian lady beetle can live up to three years.
+    prose_reviewed: true
+    diet_prose: The Harlequin or Asian lady beetle feeds on Aphids and scale insects.
   Heteromeles_arbutifolia:
     reviewed: true
     source: wikipedia:Heteromeles
     common_name: Toyon
-    dangerous_to_humans: "yes"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'yes'
+    dangerous_to_pets: 'yes'
     size: 2-5 m tall, 2-4 m wide
-    appearance: evergreen shrub with leathery, serrated leaves and clusters of small white flowers that develop into bright red berries
+    appearance: evergreen shrub with leathery, serrated leaves and clusters of small white
+      flowers that develop into bright red berries
     habitat: oak woodland, coastal scrub, and chaparral habitats in California and Baja California
     diet: none (photosynthesis)
     behavior: none
-    notable: famously believed to be the namesake of Hollywood, as early settlers named the area after its bright red berries that 
-      thrive in the hills, and is now the official city plant of Los Angeles
+    notable: famously believed to be the namesake of Hollywood, as early settlers named the
+      area after its bright red berries that thrive in the hills, and is now the official
+      city plant of Los Angeles
+    size_prose: The bamboo palm grows 2 to 5 meters tall and 2 to 4 meters wide.
+    appearance_prose: The Toyon is an evergreen shrub with leathery, serrated leaves and clusters
+      of small white flowers that develop into bright red berries.
+    behavior_prose: The Toyon has no notable behaviors.
+    notable_prose: The Toyon is famously believed to be the namesake of Hollywood, as early
+      settlers named the area after its bright red berries that thrive in the hills, and is
+      now the official city plant of Los Angeles.
+    prose_reviewed: true
+    diet_prose: The Toyon is autotrophic.
   Hylephila_phyleus:
     reviewed: true
     source: wikipedia:Fiery skipper
     common_name: Fiery Skipper
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 1-2.5 cm body length
     appearance: Male orange or yellow, female dark brown with pale checkered markings. Small
       brown spots on hindwing and forewing.
@@ -319,53 +585,97 @@ blurbs:
     diet: Turfgrass, including Bermudagrass, creeping bentgrass, St. Augustine grass
     behavior: Rapid flyers with darting movements; hold wings in a 'triangle' shape to absorb
       sun's rays
-    notable: as a caterpillar, it is a master of survival, creating horizontal, silk-lined tunnels at the base of lawn grass that are 
-      often too low for lawnmower blades to destroy
+    notable: as a caterpillar, it is a master of survival, creating horizontal, silk-lined
+      tunnels at the base of lawn grass that are often too low for lawnmower blades to destroy
+    size_prose: The Fiery Skipper is 1 to 2.5 centimeters long.
+    appearance_prose: The Fiery Skipper is a butterfly that has males which are orange or
+      yellow, females which are dark brown with pale checkered markings, and small brown spots
+      on its hindwing and forewing.
+    behavior_prose: The Fiery Skipper is a rapid flyer that makes darting movements, and it
+      holds its wings in a 'triangle' shape to absorb the sun's rays.
+    notable_prose: The Io moth caterpillar is a master of survival, creating horizontal, silk-lined
+      tunnels at the base of lawn grass that are often too low for lawnmower blades to destroy.
+    prose_reviewed: true
+    diet_prose: The Fiery Skipper feeds on turfgrass, including Bermudagrass, creeping bentgrass,
+      and St. Augustine grass.
   Hyles_lineata:
     reviewed: true
     source: wikipedia:Hyles lineata
     common_name: white-lined sphinx
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 2-3 inch wingspan, 2-3 inches body length
     appearance: Forewing dark brown with tan stripe and white lines. Black hindwing with pink
       median band.
-    habitat: open, often degraded, or disturbed landscapes, such as agricultural fields, fields with fireweed, and desert shrublands
+    habitat: open, often degraded, or disturbed landscapes, such as agricultural fields, fields
+      with fireweed, and desert shrublands
     diet: Adults feed on nectar from flowers; caterpillars eat host plants
     behavior: Nocturnal, but also fly during day; prefer flying at dusk and dawn
-    notable: Much like actual hummingbirds, these moths have an incredibly fast wingbeat, allowing them to hover in place while feeding
+    notable: Much like actual hummingbirds, these moths have an incredibly fast wingbeat,
+      allowing them to hover in place while feeding
+    size_prose: The monarch butterfly has a wingspan of 2 to 3 inches and is 2 to 3 inches
+      long.
+    appearance_prose: The white-lined sphinx has a forewing that is dark brown with a tan
+      stripe and white lines, and a black hindwing with a pink median band.
+    behavior_prose: The white-lined sphinx moth is nocturnal, but also flies during the day,
+      prefers to fly at dusk, and also at dawn.
+    notable_prose: The hummingbird hawk moth has an incredibly fast wingbeat, allowing it
+      to hover in place while feeding.
+    prose_reviewed: true
+    diet_prose: The white-lined sphinx is a species where adults feed on nectar from flowers,
+      and caterpillars eat host plants.
   Junco_hyemalis:
     reviewed: true
     source: wikipedia:Dark-eyed junco
     common_name: Dark-eyed junco
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 5-8 cm body length
     appearance: dark gray head, breast and upperparts; white wing bars in some subspecies
     habitat: boreal forests from Alaska to Newfoundland and south to the Appalachian Mountains;
       wintering throughout most of the United States
     diet: small insects, seeds, and fruits
     behavior: breeds in North American boreal forests; winters in a wide range of habitats
-    notable: To survive freezing temperatures, juncos grow approximately 30% more feathers by weight in winter compared to summer
+    notable: To survive freezing temperatures, juncos grow approximately 30% more feathers
+      by weight in winter compared to summer
+    size_prose: The Dark-eyed junco measures 5 to 8 centimeters in length.
+    appearance_prose: The Dark-eyed junco has a dark gray head, breast, and upperparts, with
+      white wing bars in some subspecies.
+    behavior_prose: The Dark-eyed junco breeds in North American boreal forests and winters
+      in a wide range of habitats.
+    notable_prose: The Dark-eyed junco grows approximately 30% more feathers by weight in
+      winter compared to summer.
+    prose_reviewed: true
+    diet_prose: The Dark-eyed junco feeds on small insects, seeds, and fruits.
   Laetiporus_gilbertsonii:
     reviewed: true
     source: wikipedia:Laetiporus gilbertsonii
-    dangerous_to_humans: "mild"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: mild
+    dangerous_to_pets: 'yes'
     size: 10-40 cm wide, 1-3 cm thick
-    appearance: bright orange to salmon pink, with a soft, spongy texture; grows in large, overlapping 
-      clusters on tree trunks and branches
-    habitat: coastal regions of California and southern Oregon, growing on dead or dying hardwood trees 
-      such as oak, eucalyptus, and madrone
+    appearance: bright orange to salmon pink, with a soft, spongy texture; grows in large,
+      overlapping clusters on tree trunks and branches
+    habitat: coastal regions of California and southern Oregon, growing on dead or dying hardwood
+      trees such as oak, eucalyptus, and madrone
     diet: none (photosynthesis)
     behavior: none
-    notable: The fiery orange-yellow color fades to a ghostly greyish-white and becomes brittle as it dries out and decays
+    notable: The fiery orange-yellow color fades to a ghostly greyish-white and becomes brittle
+      as it dries out and decays
+    size_prose: The Laetiporus gilbertsonii grows 10 to 40 centimeters wide and is 1 to 3
+      centimeters thick.
+    appearance_prose: The Laetiporus gilbertsonii is bright orange to salmon pink, with a
+      soft, spongy texture, and grows in large, overlapping clusters on tree trunks and branches.
+    behavior_prose: The Laetiporus gilbertsonii has no notable behaviors.
+    notable_prose: The Laetiporus gilbertsonii fungus changes from a vibrant fiery orange-yellow
+      to a ghostly greyish-white color as it dries out and decays.
+    prose_reviewed: true
+    diet_prose: The Laetiporus gilbertsonii is an organism that undergoes photosynthesis.
   Leiothlypis_celata:
     reviewed: true
     source: wikipedia:Orange-crowned warbler
     common_name: Orange-crowned Warbler
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 12-14 cm body length, 20-25 cm wingspan
     appearance: olive-grey upperparts, yellowish underparts with faint streaking and a thin
       pointed bill
@@ -374,26 +684,50 @@ blurbs:
     diet: insects, berries and nectar
     behavior: lack of wing bars, strong face marking or bright colouring; builds nest on ground
       under vegetation or low in shrubs
-    notable: The orange crown is almost always hidden by olive-yellow feathers and is rarely seen by birders.
+    notable: The orange crown is almost always hidden by olive-yellow feathers and is rarely
+      seen by birders.
+    size_prose: The Orange-crowned Warbler measures 12 to 14 centimeters in body length, with
+      a wingspan of 20 to 25 centimeters.
+    appearance_prose: The Olive Warbler is an olive-grey bird with yellowish underparts that
+      have faint streaking and a thin, pointed bill.
+    behavior_prose: The Orange-crowned Warbler lacks wing bars, has a strong face marking,
+      and does not have bright coloration, and it builds its nest on the ground under vegetation
+      or low in shrubs.
+    notable_prose: The Orange-crowned Warbler has an almost invisible orange crown, which
+      is usually concealed by its olive-yellow plumage.
+    prose_reviewed: true
+    diet_prose: The Orange-crowned Warbler feeds on insects, berries and nectar.
   Marah_macrocarpa:
     reviewed: true
     source: wikipedia:Marah macrocarpa
     common_name: wild cucumber
-    dangerous_to_humans: "yes"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'yes'
+    dangerous_to_pets: 'yes'
     size: 1-8 m long vine, 5-20 cm long and 5-6 cm diameter fruit
-    appearance: 5-7 lobed green leaves, spiraling tendrils, and small, yellowish-green to white, fragrant flowers 
-      that appear in early spring with high-climbing or sprawling, hairy stems that form a net over shrubs in late winter
+    appearance: 5-7 lobed green leaves, spiraling tendrils, and small, yellowish-green to
+      white, fragrant flowers that appear in early spring with high-climbing or sprawling,
+      hairy stems that form a net over shrubs in late winter
     habitat: chaparral, coastal sage scrub, oak woodlands, and riparian areas
     diet: none (photosynthesis)
+    behavior: none
     notable: All parts of the plant are toxic, as it contains cucurbitacins and ribosome-inactivating
       proteins.
+    size_prose: The wild cucumber grows as a vine 1 to 8 meters long, producing fruit 5 to
+      20 centimeters in length and 5 to 6 centimeters in diameter.
+    appearance_prose: The Virginia creeper has 5-7 lobed green leaves, spiraling tendrils,
+      and small, yellowish-green to white, fragrant flowers that appear in early spring with
+      high-climbing or sprawling, hairy stems.
+    notable_prose: The wild cucumber is highly toxic to humans because all its parts contain
+      cucurbitacins and ribosome-inactivating proteins.
+    prose_reviewed: true
+    behavior_prose: The wild cucumber has no notable behaviors.
+    diet_prose: The prickly pear cactus obtains its nutrients by photosynthesis.
   Melospiza_melodia:
     reviewed: true
     source: wikipedia:Song sparrow
     common_name: Song sparrow
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 11-18 cm body length, wingspan 18-25.4 cm
     appearance: Brown upperparts with dark streaks, white underneath with dark streaking and
       a dark brown spot on the breast.
@@ -402,68 +736,132 @@ blurbs:
     diet: Insects, seeds, small crustaceans
     behavior: Forages on the ground, in shrubs or very shallow water; nests in sheltered locations
       on the ground or in trees/shrubs
-    notable: Males have a repertoire of roughly 5-15 distinct songs, sometimes taking up to 30 minutes to sing through 
-      their full, complex playlist
+    notable: Males have a repertoire of roughly 5-15 distinct songs, sometimes taking up to
+      30 minutes to sing through their full, complex playlist
+    size_prose: The Song sparrow measures 11 to 18 centimeters in body length and has a wingspan
+      of 18 to 25.4 centimeters.
+    appearance_prose: The Song sparrow has brown upperparts with dark streaks, white underneath
+      with dark streaking, and a dark brown spot on its breast.
+    behavior_prose: The Song sparrow forages on the ground, in shrubs or very shallow water,
+      and nests in sheltered locations on the ground or in trees/shrubs.
+    notable_prose: The Song sparrow males have a repertoire of roughly 5-15 distinct songs,
+      sometimes taking up to 30 minutes to sing through their full, complex playlist.
+    prose_reviewed: true
+    diet_prose: The Song sparrow feeds on insects, seeds, and small crustaceans.
   Nymphalis_antiopa:
     reviewed: true
     source: wikipedia:Nymphalis antiopa
     common_name: Mourning Cloak
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 2-3 inches body length (pupa)
     appearance: Black bodies with reddish-orange dots, black spines and white dots on caterpillars;
       tan or brown gray pupae with red-tipped spikes.
     habitat: Hardwood forests in northern hemisphere, cold mountainous areas
-    diet: tree sap (especially oak, willow, and elm), fermenting fruit, dung, and mineral-rich mud 
+    diet: tree sap (especially oak, willow, and elm), fermenting fruit, dung, and mineral-rich
+      mud
     behavior: Migrates to Britain during summer and autumn, thought to hibernate in timber
       stacks
     notable: One of the longest lifespans for any butterfly, with a lifespan of 11-12 months
+    size_prose: The Mourning Cloak butterfly has a body length of 2 to 3 inches during its
+      pupa stage.
+    appearance_prose: The Io moth is a species characterized by having black bodies with reddish-orange
+      dots, black spines and white dots on its caterpillars, and tan or brown gray pupae with
+      red-tipped spikes.
+    behavior_prose: The Mourning Cloak migrates to Britain during summer and autumn, and is
+      thought to hibernate in timber stacks.
+    notable_prose: The Mourning Cloak has one of the longest lifespans for any butterfly,
+      with a lifespan of 11-12 months.
+    prose_reviewed: true
+    diet_prose: The Mourning Cloak butterfly feeds on tree sap (especially oak, willow, and
+      elm), fermenting fruit, dung, and mineral-rich mud.
   Omphalotus_olivascens:
     reviewed: true
     source: wikipedia:Omphalotus olivascens
     common_name: Western jack-o'-lantern mushroom
-    dangerous_to_humans: "yes"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'yes'
+    dangerous_to_pets: 'yes'
     size: 5-20 cm wide, 3-10 cm tall, 1-4 cm thick
-    appearance: a clustered, orange-to-olive-brown fungus with a convex cap that becomes funnel-shaped with age; true, decurrent 
-      gills (running down the stem) that glow with a faint green light in the dark
-    habitat: large, dense clusters at the base of hardwood trees - especially oaks and Eucalyptus - or on buried wood and roots along the California coast
+    appearance: a clustered, orange-to-olive-brown fungus with a convex cap that becomes funnel-shaped
+      with age; true, decurrent gills (running down the stem) that glow with a faint green
+      light in the dark
+    habitat: large, dense clusters at the base of hardwood trees - especially oaks and Eucalyptus
+      - or on buried wood and roots along the California coast
     diet: none (photosynthesis)
     behavior: none
-    notable: when boiled, this "ghostly" fungus releases a vivid purple dye that can be used on wool and fabrics
+    notable: when boiled, this "ghostly" fungus releases a vivid purple dye that can be used
+      on wool and fabrics
+    size_prose: The Western jack-o'-lantern mushroom is 5 to 20 centimeters wide, 3 to 10
+      centimeters tall, and 1 to 4 centimeters thick.
+    appearance_prose: The Western jack-o'-lantern mushroom is a clustered, orange-to-olive-brown
+      fungus with a convex cap that becomes funnel-shaped with age, true, decurrent gills
+      (running down the stem) that glow with a faint green light in the dark.
+    behavior_prose: The Western jack-o'-lantern mushroom has none.
+    notable_prose: The Western jack-o'-lantern mushroom releases a vivid purple dye when boiled
+      that can be used on wool and fabrics.
+    prose_reviewed: true
+    diet_prose: The Indian pipe plant obtains its nutrients by photosynthesis.
   Otospermophilus_beecheyi:
     reviewed: true
     source: wikipedia:California ground squirrel
     common_name: California ground squirrel
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 35-50 cm body length, 13-23 cm tail length, 280-740 g weight
-    appearance: grayish-brown fur with white speckles, bushy tail, and a white ring around each eye
-    habitat: open areas, grasslands, chaparral, oak woodlands, and disturbed sites like roadsides, pastures, and 
-      parks across California, western Oregon, southwestern Washington, and Baja California
+    appearance: grayish-brown fur with white speckles, bushy tail, and a white ring around
+      each eye
+    habitat: open areas, grasslands, chaparral, oak woodlands, and disturbed sites like roadsides,
+      pastures, and parks across California, western Oregon, southwestern Washington, and
+      Baja California
     diet: seeds, grains, nuts, fruits, insects, roots
     behavior: hibernate in colder parts of range; active year-round in warmer areas; estivate
       for short periods during hot summers
-    notable: When spotting a rattlesnake, a squirrel will increase blood flow to its bushy tail to make it warmer. It then wags the hot tail, appearing larger in the 
-      infrared spectrum that rattlesnakes use to detect prey
+    notable: When spotting a rattlesnake, a squirrel will increase blood flow to its bushy
+      tail to make it warmer. It then wags the hot tail, appearing larger in the infrared
+      spectrum that rattlesnakes use to detect prey
+    size_prose: The California ground squirrel measures 35 to 50 centimeters in body length,
+      with a tail of 13 to 23 centimeters and weighs between 280 to 740 grams.
+    appearance_prose: The California ground squirrel has grayish-brown fur with white speckles,
+      a bushy tail, and a white ring around each eye.
+    behavior_prose: The Arctic ground squirrel hibernates in colder parts of its range, is
+      active year-round in warmer areas, and estivates for short periods during hot summers.
+    notable_prose: The California ground squirrel increases blood flow to its bushy tail to
+      make it warmer and appears larger in the infrared spectrum when wagging it.
+    prose_reviewed: true
+    diet_prose: The African elephant is an herbivore that consumes seeds, grains, nuts, fruits,
+      insects, and roots.
   Oxalis_pes-caprae:
     reviewed: true
     source: wikipedia:Oxalis pes-caprae
     common_name: African wood-sorrel or Bermuda buttercup
-    dangerous_to_humans: "mild"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: mild
+    dangerous_to_pets: 'yes'
     size: 12-45 cm tall, 20-50 cm wide
-    appearance: bright yellow, five-petaled flowers with clover-like leaves with occasional distinct purplish or brown dots
-    habitat: native to South Africa; invasive in Mediterranean climates worldwide, including California
+    appearance: bright yellow, five-petaled flowers with clover-like leaves with occasional
+      distinct purplish or brown dots
+    habitat: native to South Africa; invasive in Mediterranean climates worldwide, including
+      California
     diet: none (photosynthesis)
     behavior: none
-    notable: contains oxalic acid, which can cause mild symptoms like stomach upset and skin irritation in humans, and more severe symptoms in pets if ingested in large quantities
+    notable: contains oxalic acid, which can cause mild symptoms like stomach upset and skin
+      irritation in humans, and more severe symptoms in pets if ingested in large quantities
+    size_prose: The African wood-sorrel or Bermuda buttercup grows 12 to 45 centimeters tall
+      and 20 to 50 centimeters wide.
+    appearance_prose: The Bermuda buttercup has bright yellow, five-petaled flowers and clover-like
+      leaves with occasional distinct purplish or brown dots.
+    behavior_prose: The African wood-sorrel or Bermuda buttercup has no notable behaviors.
+    notable_prose: The African wood-sorrel or Bermuda buttercup contains oxalic acid, which
+      can cause mild symptoms like stomach upset and skin irritation in humans, and more severe
+      symptoms in pets if ingested in large quantities.
+    prose_reviewed: true
+    diet_prose: The African wood-sorrel or Bermuda buttercup is an organism that obtains its
+      nutrients through photosynthesis.
   Papilio_rutulus:
     reviewed: true
     source: wikipedia:Papilio rutulus
     common_name: Western Tiger Swallowtail
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 4-5.5 cm body length, 7-10 cm wingspan
     appearance: Brightly colored, yellow with black stripes and blue and orange spots near
       tail.
@@ -471,77 +869,154 @@ blurbs:
     diet: Leaves of various trees, including cottonwood, willow, quaking aspen
     behavior: Active butterflies, rarely seen at rest; males congregate near water to drink
       and extract minerals.
-    notable: its caterpillars start out looking exactly like bird droppings to deter predators before 
-      turning bright green with large "eyespots"
+    notable: its caterpillars start out looking exactly like bird droppings to deter predators
+      before turning bright green with large "eyespots"
+    size_prose: The Western Tiger Swallowtail measures 4 to 5.5 centimeters in body length
+      and has a wingspan of 7 to 10 centimeters.
+    appearance_prose: The monarch butterfly is brightly colored, yellow with black stripes
+      and blue and orange spots near its tail.
+    behavior_prose: The Western Tiger Swallowtail is an active butterfly that is rarely seen
+      at rest, with males congregating near water to drink and extract minerals.
+    notable_prose: The Eastern Tiger Swallowtail's caterpillars start out looking exactly
+      like bird droppings to deter predators before turning bright green with large "eyespots".
+    prose_reviewed: true
+    diet_prose: The Western Tiger Swallowtail feeds on leaves of various trees, including
+      cottonwood, willow, and quaking aspen.
   Paropsis_atomaria:
     reviewed: true
     source: wikipedia:Paropsis atomaria
     common_name: Speckled leaf beetle
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 8-14 mm long, 4-5 mm wide
-    appearance: Distinctive dome-shaped, oval, and robust light brown, tan, or pale pink-orange body,
-      speckled with orange dots and faint black spots
+    appearance: Distinctive dome-shaped, oval, and robust light brown, tan, or pale pink-orange
+      body, speckled with orange dots and faint black spots
     habitat: Eucalyptus and Corymbia trees, particularly in coastal areas and forests
     diet: eucalyptus and corymbia leaves
-    behavior: active during the day, often found on the undersides of leaves; can cause significant damage to eucalyptus trees by skeletonizing the leaves
-    notable: The beetle's name, "atomaria," comes from the Latin word for "speckled," referring to the small black speckles on its elytra
+    behavior: active during the day, often found on the undersides of leaves; can cause significant
+      damage to eucalyptus trees by skeletonizing the leaves
+    notable: The beetle's name, "atomaria," comes from the Latin word for "speckled," referring
+      to the small black speckles on its elytra
+    size_prose: The Speckled leaf beetle is 8 to 14 millimeters long and 4 to 5 millimeters
+      wide.
+    appearance_prose: The Speckled leaf beetle has a distinctive dome-shaped, oval, and robust
+      light brown, tan, or pale pink-orange body, speckled with orange dots and faint black
+      spots.
+    behavior_prose: The Speckled leaf beetle is active during the day and often found on the
+      undersides of leaves, and it can cause significant damage to eucalyptus trees by skeletonizing
+      the leaves.
+    notable_prose: The Speckled leaf beetle is named 'atomaria,' which comes from the Latin
+      word for 'speckled,' referring to the small black speckles on its elytra.
+    prose_reviewed: true
+    diet_prose: The Speckled leaf beetle feeds on eucalyptus and corymbia leaves.
   Procyon_lotor:
     reviewed: true
     source: wikipedia:Raccoon
     common_name: Raccoon
-    dangerous_to_humans: "yes"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'yes'
+    dangerous_to_pets: 'yes'
     size: 40-70 cm body length, 19-40 cm tail length, 2-10 kg weight
-    appearance: grayish-brown fur with a distinctive black "mask" around the eyes and a bushy, ringed tail, extremely dexterous front paws
-    habitat: highly adaptable, preferring moist woodland areas, riparian zones, and swamps, but frequently inhabits urban, suburban, and agricultural areas
-    diet: omnivorous, a mix of plants (berries, nuts, fruits, corn), invertebrates (crayfish, insects), and small vertebrates (frogs, rodents, bird eggs), 
-      with human garbage, pet food, and carrion
-    behavior: usually nocturnal; they "wash" their food by dipping it in water or rub them together before eating
-    notable: can remember solution to tasks for at least three years; are not bothered by falls of 12 to 15 meters.
+    appearance: grayish-brown fur with a distinctive black "mask" around the eyes and a bushy,
+      ringed tail, extremely dexterous front paws
+    habitat: highly adaptable, preferring moist woodland areas, riparian zones, and swamps,
+      but frequently inhabits urban, suburban, and agricultural areas
+    diet: omnivorous, a mix of plants (berries, nuts, fruits, corn), invertebrates (crayfish,
+      insects), and small vertebrates (frogs, rodents, bird eggs), with human garbage, pet
+      food, and carrion
+    behavior: usually nocturnal; they "wash" their food by dipping it in water or rub them
+      together before eating
+    notable: can remember solution to tasks for at least three years; are not bothered by
+      falls of 12 to 15 meters.
+    size_prose: The Raccoon measures 40 to 70 centimeters in body length, with a tail of 19
+      to 40 centimeters and a weight of 2 to 10 kilograms.
+    appearance_prose: The Raccoon has grayish-brown fur with a distinctive black "mask" around
+      the eyes and a bushy, ringed tail, and extremely dexterous front paws.
+    behavior_prose: The Raccoon is usually nocturnal and washes its food by dipping it in
+      water or rubbing them together before eating.
+    notable_prose: The Raccoon can remember the solution to tasks for at least three years
+      and is not bothered by falls of 12 to 15 meters.
+    prose_reviewed: true
+    diet_prose: The Raccoon is an omnivore that consumes a mix of plants (berries, nuts, fruits,
+      corn), invertebrates (crayfish, insects), and small vertebrates (frogs, rodents, bird
+      eggs), with human garbage, pet food, and carrion.
   Quercus_agrifolia:
     reviewed: true
     source: wikipedia:Quercus agrifolia
     common_name: California live oak
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'yes'
     size: 7-24 m tall, 5-20 m wide
-    appearance: evergreen tree with a broad, dense, and spreading canopy; simple, dark green, and evergreen leaves that are stiff, leathery, and often convex
-    habitat: coastal regions of California and Baja California, often found in coastal hills, valleys, and plains within 100 km of the Pacific Ocean
+    appearance: evergreen tree with a broad, dense, and spreading canopy; simple, dark green,
+      and evergreen leaves that are stiff, leathery, and often convex
+    habitat: coastal regions of California and Baja California, often found in coastal hills,
+      valleys, and plains within 100 km of the Pacific Ocean
     diet: none (photosynthesis)
-    behavior: drought-tolerant, can resprout after fire, provides habitat and food for many species
-    notable: can live up to 1,000 years old; eating the leaves or acorns can cause digestive issues in humans and pets due to tannins
+    behavior: drought-tolerant, can resprout after fire, provides habitat and food for many
+      species
+    notable: can live up to 1,000 years old; eating the leaves or acorns can cause digestive
+      issues in humans and pets due to tannins
+    size_prose: The California live oak can grow up to 7 to 24 meters in height and 5 to 20
+      meters in width.
+    appearance_prose: The California live oak is an evergreen tree with a broad, dense, and
+      spreading canopy, simple, dark green, and evergreen leaves that are stiff, leathery,
+      and often convex.
+    behavior_prose: The California live oak is drought-tolerant, can resprout after fire,
+      and provides habitat and food for many species.
+    notable_prose: The California live oak can live up to 1,000 years old.
+    prose_reviewed: true
+    diet_prose: The prickly pear cactus obtains its nutrients through photosynthesis.
   Rhus_integrifolia:
     reviewed: true
     source: wikipedia:Rhus integrifolia
     common_name: lemonade sumac or berry
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 2-7 m tall, 3-7 m wide
-    appearance: dense, evergreen shrub or small tree with a spreading, mounded form and dark green, leathery leaves with toothed edges
-    habitat: coastal Southern California and Baja California, typically found on coastal bluffs, slopes, and in canyons below 800 meters
+    appearance: dense, evergreen shrub or small tree with a spreading, mounded form and dark
+      green, leathery leaves with toothed edges
+    habitat: coastal Southern California and Baja California, typically found on coastal bluffs,
+      slopes, and in canyons below 800 meters
     diet: none (photosynthesis)
     behavior: none
     notable: leaves can be used as a brown dye or mordant; oil extracted from seeds can be
-      used to manufacture candles; once established, the shrub is nearly indestructible, drought-tolerant, fire-resistant, and makes an excellent privacy hedge
+      used to manufacture candles; once established, the shrub is nearly indestructible, drought-tolerant,
+      fire-resistant, and makes an excellent privacy hedge
+    size_prose: The lemonade sumac or berry bush measures 2 to 7 meters in height and 3 to
+      7 meters in width.
+    appearance_prose: The Japanese holly is a dense, evergreen shrub or small tree with a
+      spreading, mounded form and dark green, leathery leaves with toothed edges.
+    behavior_prose: The lemonade sumac or berry has no notable behaviors.
+    notable_prose: The lemonade sumac or berry shrub is nearly indestructible, drought-tolerant,
+      fire-resistant, and makes an excellent privacy hedge.
+    prose_reviewed: true
+    diet_prose: The prickly pear cactus obtains its nutrients by photosynthesis.
   Salvia_mellifera:
     reviewed: true
     source: wikipedia:Salvia mellifera
     common_name: Californian black sage
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 1-2 m tall, 1-3 m wide
-    appearance: dark green, wrinkled leaves and small, whorled flowers in shades of pale blue, lavender, or white
-    habitat: often in sunny, hot, dry areas such as dry slopes, coastal bluffs, and in canyons below 1300 meters in coastal California and Baja California
+    appearance: dark green, wrinkled leaves and small, whorled flowers in shades of pale blue,
+      lavender, or white
+    habitat: often in sunny, hot, dry areas such as dry slopes, coastal bluffs, and in canyons
+      below 1300 meters in coastal California and Baja California
     diet: none (photosynthesis)
     behavior: none
     notable: produces a rare and prized honey due to its dry climate
+    size_prose: The Californian black sage grows 1 to 2 meters tall and 1 to 3 meters wide.
+    appearance_prose: The California black sage has dark green, wrinkled leaves and small,
+      whorled flowers in shades of pale blue, lavender, or white.
+    behavior_prose: The Californian black sage has no notable behaviors.
+    notable_prose: The Italian honey bee produces a rare and prized honey due to its dry climate.
+    prose_reviewed: true
+    diet_prose: The Californian black sage does not consume food because it undergoes photosynthesis.
   Sayornis_nigricans:
     reviewed: true
     source: wikipedia:Black phoebe
     common_name: Black Phoebe
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 16 cm (6.3 in) length, weighing 15 to 22 g (0.5 to 0.8 oz)
     appearance: Predominantly black plumage with white on belly and undertail coverts; brown
       feather tips and wing-bars on juveniles.
@@ -549,65 +1024,130 @@ blurbs:
     diet: Mainly insectivorous
     behavior: Tail-wagging motion; direct flight with steady wing beats
     notable: Makes an open cup nest cemented in place with mud
+    size_prose: The Black Phoebe measures 16 centimeters in length and weighs between 15 to
+      22 grams.
+    appearance_prose: The Black Phoebe has predominantly black plumage with white on its belly
+      and undertail coverts, and brown feather tips and wing-bars on juveniles.
+    behavior_prose: The Black Phoebe exhibits a tail-wagging motion and flies directly with
+      steady wing beats.
+    notable_prose: The Black Phoebe makes an open cup nest cemented in place with mud.
+    prose_reviewed: true
+    diet_prose: The Black Phoebe is mainly insectivorous.
   Sceloporus_occidentalis:
     reviewed: true
     source: wikipedia:Western fence lizard
     common_name: Western fence lizard
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 6-9 cm body length, 15-20 cm total length
-    appearance: gray, brown, or black with dark blotches; bright blue abdominal and throat patches in males and yellowish color on the rear of their thighs
-    habitat: sunny, arid, open areas like woodlands, grasslands, chaparral, and coniferous forests
+    appearance: gray, brown, or black with dark blotches; bright blue abdominal and throat
+      patches in males and yellowish color on the rear of their thighs
+    habitat: sunny, arid, open areas like woodlands, grasslands, chaparral, and coniferous
+      forests
     diet: insects, small invertebrates
-    behavior: diurnal, often seen on fences or in yards; perform rapid, rhythmic push-up motions with their front legs while perched on sunny, elevated surfaces.
-    notable: they have blood that contains a special protein capable of killing the bacteria that causes Lyme disease
+    behavior: diurnal, often seen on fences or in yards; perform rapid, rhythmic push-up motions
+      with their front legs while perched on sunny, elevated surfaces.
+    notable: they have blood that contains a special protein capable of killing the bacteria
+      that causes Lyme disease
+    size_prose: The Western fence lizard measures 6 to 9 centimeters in body length and 15
+      to 20 centimeters in total length.
+    appearance_prose: The Western fence lizard is gray, brown, or black with dark blotches,
+      has bright blue abdominal and throat patches in males, and a yellowish color on the
+      rear of its thighs.
+    behavior_prose: The Western fence lizard is diurnal, often seen on fences or in yards,
+      and performs rapid, rhythmic push-up motions with its front legs while perched on sunny,
+      elevated surfaces.
+    notable_prose: The Western fence lizard has blood that contains a special protein capable
+      of killing the bacteria that causes Lyme disease.
+    prose_reviewed: true
+    diet_prose: The Western fence lizard feeds on insects and small invertebrates.
   Schistocerca_nitens:
     reviewed: true
     source: wikipedia:Schistocerca nitens
     common_name: Gray Bird Grasshopper
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 40-75 mm body length
-    appearance: slender, mottled gray, brown, or yellow grasshoppers, often with a light-colored dorsal stripe running from the head to the wings;
-      large and notably long, with a slender body and wings that extend beyond the abdomen
-    habitat: arid and semi-arid environments across the Americas, inhabiting deserts, grasslands, shrublands, and urban agricultural areas
+    appearance: slender, mottled gray, brown, or yellow grasshoppers, often with a light-colored
+      dorsal stripe running from the head to the wings; large and notably long, with a slender
+      body and wings that extend beyond the abdomen
+    habitat: arid and semi-arid environments across the Americas, inhabiting deserts, grasslands,
+      shrublands, and urban agricultural areas
     diet: ornamental plants, crop plants
-    behavior: solitary, but can reach swarm proportions in favorable environments; long-distance flight, strong attraction to bright lights
+    behavior: solitary, but can reach swarm proportions in favorable environments; long-distance
+      flight, strong attraction to bright lights
     notable: Introduced to Hawaii several decades ago and caused significant damage to vegetation
       on the island of Nīhoa in 2004
+    size_prose: The Gray Bird Grasshopper is 40 to 75 millimeters long.
+    appearance_prose: The Gray Bird Grasshopper is a slender, mottled gray, brown, or yellow
+      grasshopper, often with a light-colored dorsal stripe running from the head to the wings,
+      large and notably long, with a slender body and wings that extend beyond the abdomen.
+    behavior_prose: The Gray Bird Grasshopper is solitary, but can reach swarm proportions
+      in favorable environments, and it makes long-distance flights with a strong attraction
+      to bright lights.
+    notable_prose: The Gray Bird Grasshopper was introduced to Hawaii several decades ago
+      and caused significant damage to vegetation on the island of Nīhoa in 2004.
+    prose_reviewed: true
+    diet_prose: The Gray Bird Grasshopper feeds on ornamental plants, crop plants.
   Sialia_mexicana:
     reviewed: true
     source: wikipedia:Western bluebird
     common_name: Western bluebird
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 15-19 cm length, 29-34 cm wingspan, 24-31 g weight
-    appearance: Males are vibrant with a deep cobalt-blue head, throat, and back, paired with a rusty-orange breast and grayish belly; 
-      females are much duller, with a gray-brown head and back, pale orange wash on the breast, and limited dull blue on the wings and tail
-    habitat: open coniferous and deciduous woodlands, savanna, riparian areas, and farmland across western North America
+    appearance: Males are vibrant with a deep cobalt-blue head, throat, and back, paired with
+      a rusty-orange breast and grayish belly; females are much duller, with a gray-brown
+      head and back, pale orange wash on the breast, and limited dull blue on the wings and
+      tail
+    habitat: open coniferous and deciduous woodlands, savanna, riparian areas, and farmland
+      across western North America
     diet: insects, berries
     behavior: pounces on ground for food; flies to catch aerial prey
     notable: 45% of nests carried young not offspring of male partner
+    size_prose: The Western bluebird measures 15 to 19 centimeters in length, with a wingspan
+      of 29 to 34 centimeters and a weight of 24 to 31 grams.
+    appearance_prose: The indigo bunting is a male that is vibrant with a deep cobalt-blue
+      head, throat, and back, paired with a rusty-orange breast and grayish belly; females
+      are much duller, with a gray-brown head and back, pale orange wash on the breast, and
+      limited dull blue on the wings and tail.
+    behavior_prose: The peregrine falcon pounces on the ground for food and flies to catch
+      aerial prey.
+    notable_prose: The Western bluebird has a remarkable 45% of nests that carry young not
+      the offspring of the male partner.
+    prose_reviewed: true
+    diet_prose: The Western bluebird feeds on insects and berries.
   Sisyrinchium_bellum:
     reviewed: true
     source: wikipedia:Sisyrinchium bellum
     common_name: western blue-eyed grass
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 15-90 cm tall, 10-50 cm wide
-    appearance: perennial herb with grass-like, blue-green, fan-shaped foliage; 
-      showy, star-shaped flowers that are typically violet-blue with darker veins and a bright yellow eye
+    appearance: perennial herb with grass-like, blue-green, fan-shaped foliage; showy, star-shaped
+      flowers that are typically violet-blue with darker veins and a bright yellow eye
     habitat: open, grassy areas, coastal bluffs, oak woodlands, and yellow pine forests
     diet: none (photosynthesis)
     behavior: none
     notable: The Ohlone used an infusion of its roots and leaves as a cure for indigestion
       and stomach pain.
+    size_prose: The western blue-eyed grass grows 15 to 90 centimeters tall and 10 to 50 centimeters
+      wide.
+    appearance_prose: The western blue-eyed grass is a perennial herb with grass-like, blue-green,
+      fan-shaped foliage, and showy, star-shaped flowers that are typically violet-blue with
+      darker veins and a bright yellow eye.
+    behavior_prose: The western blue-eyed grass has no notable behaviors.
+    notable_prose: The California poppy has been used by the Ohlone to treat indigestion and
+      stomach pain with an infusion of its roots and leaves.
+    prose_reviewed: true
+    diet_prose: The western blue-eyed grass has no diet, as it obtains its nutrients through
+      photosynthesis.
   Spinus_psaltria:
     reviewed: true
     source: wikipedia:Lesser goldfinch
     common_name: Lesser Goldfinch
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 9-12 cm length, 8-11.5 g weight
     appearance: bright yellow underparts, short conical bill, and distinctive white wing patches
     habitat: North America, from western USA to south-central Mexico, including coastal scrub
@@ -615,13 +1155,24 @@ blurbs:
     diet: Seeds, insects
     behavior: Undulating flight, harsh chig chig chig call, high-pitched whistle teeeyeee
       or teeeyooo
-    notable: North America's smallest goldfinch, but ften dominates the larger Lawrence's Goldfinch at feeding stations
+    notable: North America's smallest goldfinch, but ften dominates the larger Lawrence's
+      Goldfinch at feeding stations
+    size_prose: The Lesser Goldfinch measures 9 to 12 centimeters in length and weighs 8 to
+      11.5 grams.
+    appearance_prose: The Lesser Goldfinch is a bird with bright yellow underparts, a short
+      conical bill, and distinctive white wing patches.
+    behavior_prose: The Lesser Goldfinch has undulating flight, makes a harsh chig chig chig
+      call, and produces a high-pitched whistle that sounds like teeeyeee or teeeyooo.
+    notable_prose: The Lesser Goldfinch is North America's smallest goldfinch, but it often
+      dominates the larger Lawrence's Goldfinch at feeding stations.
+    prose_reviewed: true
+    diet_prose: The Lesser Goldfinch feeds on seeds and insects.
   Steatoda_nobilis:
     reviewed: true
     source: wikipedia:Steatoda nobilis
     common_name: Noble False Widow
-    dangerous_to_humans: "mild"
-    dangerous_to_pets: "yes"
+    dangerous_to_humans: mild
+    dangerous_to_pets: 'yes'
     size: 9.5-14 mm body length (females), 7-11 mm (males)
     appearance: Brown bulbous abdomen with cream coloured markings, reddish-orange legs.
     habitat: Year-round in various habitats, including cacti, roadside cuttings, demolished
@@ -629,12 +1180,22 @@ blurbs:
     diet: Insects, spiders, small vertebrates
     behavior: Uses 'attack wrap' strategy to immobilize prey; venom induces paralysis.
     notable: Considered one of the world's most invasive species of spider.
+    size_prose: The Noble False Widow is 9.5 to 14 millimeters long in females, and 7 to 11
+      millimeters in males.
+    appearance_prose: The Noble False Widow has a brown bulbous abdomen with cream-coloured
+      markings and reddish-orange legs.
+    behavior_prose: The Noble False Widow uses an attack wrap strategy to immobilize its prey
+      and its venom induces paralysis.
+    notable_prose: The Noble False Widow is considered one of the world's most invasive species
+      of spider.
+    prose_reviewed: true
+    diet_prose: The Noble False Widow feeds on insects, spiders, and small vertebrates.
   Sylvilagus_audubonii:
     reviewed: true
     source: wikipedia:Desert cottontail
     common_name: Desert cottontail
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 36-42 cm long, 700-1,200 g weight
     appearance: Greyish-brown fur, rounded tail with white edge and underside, white belly,
       large ears carried erect
@@ -643,25 +1204,48 @@ blurbs:
     diet: grass, leaves, peas, mesquite bark, fallen fruit, prickly pear pads, shrub twigs
     behavior: Nocturnal, solitary, coprophagic (re-ingests feces to extract nutrients)
     notable: can reach speeds of up to 32 km/h in a zig-zag pattern to evade predators
+    size_prose: The Desert cottontail measures 36 to 42 centimeters in length and weighs 700
+      to 1,200 grams.
+    appearance_prose: The Desert cottontail has greyish-brown fur, a rounded tail with a white
+      edge and underside, a white belly, and large ears carried erect.
+    behavior_prose: The Desert cottontail is nocturnal, solitary, and coprophagic (it re-ingests
+      feces to extract nutrients).
+    notable_prose: The Desert cottontail can reach speeds of up to 32 km/h in a zig-zag pattern
+      to evade predators.
+    prose_reviewed: true
+    diet_prose: The Desert cottontail consumes grass, leaves, peas, mesquite bark, fallen
+      fruit, prickly pear pads, and shrub twigs.
   Trifolium_repens:
     reviewed: true
     source: wikipedia:Trifolium repens
     common_name: White Clover
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 8-30 cm tall, 30+ cm diameter of spread, 2 cm flower heads
-    appearance: low-growing, mat-forming perennial herb with trifoliate leaves and small, white or pink-tinged, globular flower heads
-    habitat: disturbed, moist, and sunny environments such as lawns, pastures, roadsides, and fields
+    appearance: low-growing, mat-forming perennial herb with trifoliate leaves and small,
+      white or pink-tinged, globular flower heads
+    habitat: disturbed, moist, and sunny environments such as lawns, pastures, roadsides,
+      and fields
     diet: none (photosynthesis)
     behavior: none
-    notable: originated from two different species mating 28,000 years ago; the four-leaf clover is a rare genetic mutation of the 
-      common three-leaf variety, occurring in about 1 in 10,000 clovers
+    notable: originated from two different species mating 28,000 years ago; the four-leaf
+      clover is a rare genetic mutation of the common three-leaf variety, occurring in about
+      1 in 10,000 clovers
+    size_prose: The White Clover grows 8 to 30 centimeters in height, with a diameter of spread
+      of 30 centimeters or more and produces flowers that are 2 centimeters in diameter.
+    appearance_prose: The White Clover is a low-growing, mat-forming perennial herb with trifoliate
+      leaves and small, white or pink-tinged, globular flower heads.
+    behavior_prose: The White Clover has no notable behaviors.
+    notable_prose: The White Clover originated from two different species mating 28,000 years
+      ago and has a rare four-leaf genetic mutation that occurs in about 1 in 10,000 plants.
+    prose_reviewed: true
+    diet_prose: The Venus flytrap does not consume food because it undergoes photosynthesis.
   Tyrannus_vociferans:
     reviewed: true
     source: wikipedia:Cassin's kingbird
     common_name: Cassin's kingbird
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 21-23 cm length, 41 cm wingspan
     appearance: Gray head with darker cheeks; dark tail with buffy fringe and gray-olive underparts.
       Pale throat and deep yellow lower breast.
@@ -670,18 +1254,46 @@ blurbs:
     diet: Insects, berries, fruits
     behavior: Builds bulky nest on tree limb; hawks insects from high perches; pumps tail
       up and down while perched to deter predators.
-    notable: the Latin translation of its name is is vociferous tyrant; and the kingbird fearlessly attacks much larger 
-      hawks and crows to protect its nest, often striking them from behind
+    notable: the Latin translation of its name is is vociferous tyrant; and the kingbird fearlessly
+      attacks much larger hawks and crows to protect its nest, often striking them from behind
+    size_prose: The Cassin's kingbird measures 21 to 23 centimeters in length, with a wingspan
+      of 41 centimeters.
+    appearance_prose: The Cassin's kingbird has a gray head with darker cheeks, a dark tail
+      with buffy fringe, and gray-olive underparts, along with a pale throat and deep yellow
+      lower breast.
+    behavior_prose: The Cassin's kingbird builds a bulky nest on a tree limb, hawks insects
+      from high perches, and pumps its tail up and down while perched to deter predators.
+    notable_prose: The Cassin's kingbird is a vociferous tyrant that fearlessly attacks much
+      larger hawks and crows to protect its nest, often striking them from behind.
+    prose_reviewed: true
+    diet_prose: The Cassin's kingbird feeds on insects, berries, and fruits.
   Zenaida_macroura:
     reviewed: true
     source: wikipedia:Mourning dove
     common_name: Mourning dove
-    dangerous_to_humans: "no"
-    dangerous_to_pets: "no"
+    dangerous_to_humans: 'no'
+    dangerous_to_pets: 'no'
     size: 23-36 cm long, 37-45 cm wingspan, 95-170 g weight
-    appearance: slender, medium-sized bird; light gray and brown body with black spots on wings, long pointed tail with white edges, and a small head
-    habitat: open and semi-open habitats across North and Central America, including urban areas, farmland, grasslands, and deserts
-    diet: almost exclusively seeds, with a wide variety of wild seeds, cultivated grains, and weeds
+    appearance: slender, medium-sized bird; light gray and brown body with black spots on
+      wings, long pointed tail with white edges, and a small head
+    habitat: open and semi-open habitats across North and Central America, including urban
+      areas, farmland, grasslands, and deserts
+    diet: almost exclusively seeds, with a wide variety of wild seeds, cultivated grains,
+      and weeds
     behavior: generally monogamous, both parents incubate and care for young
-    notable:  Their song is perceived as a lonely and sad-sounding call, which people often associate with being in mourning;
-      can fly at speeds up to 55 mph and produces a unique, sharp whistling sound with its wings upon takeoff
+    notable: Their song is perceived as a lonely and sad-sounding call, which people often
+      associate with being in mourning; can fly at speeds up to 55 mph and produces a unique,
+      sharp whistling sound with its wings upon takeoff
+    size_prose: The Mourning dove measures 23 to 36 centimeters in length, with a wingspan
+      of 37 to 45 centimeters and a weight of 95 to 170 grams.
+    appearance_prose: The Mourning dove is a slender, medium-sized bird with a light gray
+      and brown body, black spots on its wings, a long pointed tail with white edges, and
+      a small head.
+    behavior_prose: The Mourning dove is generally monogamous, and both parents incubate and
+      care for their young.
+    notable_prose: The Mourning dove's song is perceived as a lonely and sad-sounding call,
+      which people often associate with being in mourning; it can fly at speeds up to 55 mph
+      and produces a unique, sharp whistling sound with its wings upon takeoff.
+    prose_reviewed: true
+    diet_prose: The Mourning dove feeds almost exclusively on seeds, with a wide variety of
+      wild seeds, cultivated grains, and weeds.
