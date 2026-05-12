@@ -18,7 +18,7 @@ blurbs:
       and thorax, clear wings with dark veins, and large compound eyes.
     behavior_prose: The oblique streaktail hoverfly has males with holoptic eyes and females
       with dichoptic eyes.
-    notable_prose: The orchid bee is hyperfocused when on a flower, ignoring cameras and fingers
+    notable_prose: The oblique streaktail hoverfly is hyperfocused when on a flower, ignoring cameras and fingers
       getting close.
     prose_reviewed: true
     diet_prose: The oblique streaktail hoverfly adults eat nectar and pollen, while their
@@ -38,10 +38,10 @@ blurbs:
       than a dog
     size_prose: The Western honey bee measures 12 to 20 millimeters in body length and has
       a wingspan of 10 to 20 millimeters.
-    appearance_prose: The striped harvestman has dark brown striped bodies with hairy legs.
+    appearance_prose: The Western honey bee has dark brown striped bodies with hairy legs.
     behavior_prose: The Western honey bee is diurnal, eusocial, and communicates complexly
       through pheromones and waggle dance.
-    notable_prose: The bloodhound has a sense of smell 50 times more powerful than a dog with
+    notable_prose: The Western honey bee has a sense of smell 50 times more powerful than a dog with
       170 odorant receptors.
     prose_reviewed: true
     diet_prose: The Western honey bee feeds on nectar, pollen, and honey.
@@ -66,10 +66,10 @@ blurbs:
       with a fragrant smell.
     behavior_prose: The California sagebrush provides good cover for smaller birds and animals,
       and is allelopathic — it secretes chemicals that inhibit other plants.
-    notable_prose: The sagebrush contains terpenes making it aromatic, used in medicine and
+    notable_prose: The California sagebrush contains terpenes making it aromatic, used in medicine and
       rituals by indigenous groups, and was coined the cowboy cologne.
     prose_reviewed: true
-    diet_prose: The prickly pear cactus obtains its nutrients through photosynthesis.
+    diet_prose: The California sagebrush obtains its nutrients through photosynthesis.
   Bombus_vosnesenskii:
     reviewed: true
     source: wikipedia:Bombus vosnesenskii
@@ -117,7 +117,7 @@ blurbs:
     notable_prose: The great horned owl has a poor sense of smell, but it can hear sounds
       from 10 miles away and see in much dimmer light than humans.
     prose_reviewed: true
-    diet_prose: The great grey owl preys on rabbits, hares, rats, mice, voles, skunks, rodents,
+    diet_prose: The great horned owl preys on rabbits, hares, rats, mice, voles, skunks, rodents,
       larger mammals, birds, reptiles, amphibians, and invertebrates.
   Buteo_lineatus:
     reviewed: true
@@ -161,16 +161,16 @@ blurbs:
     diet: Nectar from flowers, small insects, other arthropods
     behavior: Anna's hummingbirds hold their tails still while hovering
     notable: Male has the only red crown among North American hummingbird species.
-    size_prose: The Anna's hummingbird measures 9.9 to 10.9 centimeters in body length, has
+    size_prose: Anna's hummingbird measures 9.9 to 10.9 centimeters in body length, has
       a wingspan of 12 centimeters and weighs 3 to 6 grams.
-    appearance_prose: The Anna's hummingbird is an iridescent bronze-green bird with a pale
+    appearance_prose: Anna's hummingbird is an iridescent bronze-green bird with a pale
       grey chest and belly, emerald-green feathers, and in males, an iridescent crimson-red
       crown and gorget.
-    behavior_prose: The Anna's hummingbird holds its tail still while hovering.
-    notable_prose: The Anna's hummingbird is unique among North American hummingbird species
+    behavior_prose: Anna's hummingbird holds its tail still while hovering.
+    notable_prose: Anna's hummingbird is unique among North American hummingbird species
       in that its male has a distinctive red crown.
     prose_reviewed: true
-    diet_prose: The Anna's hummingbird feeds on nectar from flowers, small insects, and other
+    diet_prose: Anna's hummingbird feeds on nectar from flowers, small insects, and other
       arthropods.
   Canis_latrans:
     reviewed: true
@@ -189,9 +189,9 @@ blurbs:
       environments
     notable: They can run up to 43 mph, jump over 13 feet, and sometimes form hunting partnerships
       with badgers; known as the "song dog" because they use 11 different sounds to communicate
-    size_prose: The okapi weighs between 8 and 23 kilograms, measures 1 to 1.35 meters in
+    size_prose: The Coyote weighs between 8 and 23 kilograms, measures 1 to 1.35 meters in
       total length, and stands at a height of 0.6 meters.
-    appearance_prose: The Arctic fox is light gray and red or dull-orange, interspersed with
+    appearance_prose: The Coyote is light gray and red or dull-orange, interspersed with
       black and white, has short, soft underfur and long, coarse guard hairs, and a bushy,
       black-tipped tail.
     behavior_prose: The Coyote is an opportunistic hunter who may shadow people out of curiosity,
@@ -279,11 +279,11 @@ blurbs:
       bleeding," releasing a bitter, sticky yellow fluid from their leg joints toxic to non-human
       predators
     size_prose: The spotless lady beetle is 4 to 6.5 millimeters long.
-    appearance_prose: The red-bellied click beetle has red, unspotted elytra, and white and
+    appearance_prose: The spotless lady beetle has red, unspotted elytra, and white and
       black marks on its head and pronotum.
-    behavior_prose: The seven-spotted lady beetle is diurnal, but attracted to lights, and
+    behavior_prose: The spotless lady beetle is diurnal, but attracted to lights, and
       its pupae have a gin trap mechanism for predator defense.
-    notable_prose: The lady beetle displays warning coloration and performs reflex bleeding
+    notable_prose: The spotless lady beetle displays warning coloration and performs reflex bleeding
       when threatened as adults, releasing a bitter, sticky yellow fluid from its leg joints
       that is toxic to non-human predators.
     prose_reviewed: true
@@ -310,7 +310,7 @@ blurbs:
       of 2.5 to 3.5 centimeters.
     appearance_prose: The Monarch butterfly has vibrant orange wings, bold black veins, and
       a thick black border filled with small white spots.
-    behavior_prose: The Arctic tern migrates thousands of miles annually.
+    behavior_prose: The Monarch butterfly migrates thousands of miles annually.
     notable_prose: The Monarch butterfly undertakes an annual southward migration from northern
       and central United States to Florida and Mexico, a journey that spans multiple generations.
     prose_reviewed: true
@@ -363,12 +363,13 @@ blurbs:
       touched
     size_prose: The red bush monkeyflower measures 30 to 100 centimeters in height and 60
       to 100 centimeters in width.
-    appearance_prose: The California peony has tubular dark orange to red flowers and narrow,
+    appearance_prose: The red bush monkeyflower has tubular dark orange to red flowers and narrow,
       lance-shaped (linear), shiny, dark-green leaves.
     behavior_prose: The red bush monkeyflower has no notable behaviors.
-    notable_prose: The sensitive orchid has a stigma that closes upon being touched.
+    notable_prose: The red bush monkeyflower has a stigma that closes upon being touched, similar 
+      to a Venus flytrap.
     prose_reviewed: true
-    diet_prose: The prickly pear cactus obtains its nutrients by photosynthesis.
+    diet_prose: The red bush monkeyflower obtains its nutrients by photosynthesis.
   Encelia_californica:
     reviewed: true
     source: wikipedia:Encelia californica
@@ -393,7 +394,7 @@ blurbs:
     notable_prose: The California coast or bush sunflower was used by the Tongva people to
       create a pain-relieving paste for joints.
     prose_reviewed: true
-    diet_prose: The prickly pear cactus obtains its nutrients through photosynthesis.
+    diet_prose: The California coast or bush sunflower obtains its nutrients through photosynthesis.
   Eriogonum_fasciculatum:
     reviewed: true
     source: wikipedia:Eriogonum fasciculatum
@@ -416,7 +417,7 @@ blurbs:
     behavior_prose: The California buckwheat has no notable behaviors.
     notable_prose: The California buckwheat is most important native source of honey in California.
     prose_reviewed: true
-    diet_prose: The prickly pear cactus obtains its nutrients through photosynthesis.
+    diet_prose: The California buckwheat obtains its nutrients through photosynthesis.
   Euphorbia_maculata:
     reviewed: true
     source: wikipedia:Euphorbia maculata
@@ -442,7 +443,7 @@ blurbs:
     notable_prose: The Spotted Spurge contains triterpenoids with anti-inflammatory and anti-proliferative
       properties when medicinally applied.
     prose_reviewed: true
-    diet_prose: The Spotted Spurge does not consume food because it performs photosynthesis.
+    diet_prose: The Spotted Spurge obtains its nutrients through photosynthesis.
   Euphorbia_peplus:
     reviewed: true
     source: wikipedia:Euphorbia peplus
@@ -461,15 +462,15 @@ blurbs:
       ingenol mebutate
     size_prose: The petty spurge grows 5 to 30 centimeters in height and is 20 centimeters
       in width.
-    appearance_prose: The small-flowered catchfly is a small, erect annual herb with erect,
+    appearance_prose: The petty spurge is a small, erect annual herb with erect,
       smooth, often reddish-green stems at the base, and leaves that are oval-shaped with
       rounded tips and smooth edges.
     behavior_prose: The petty spurge has no behavior.
-    notable_prose: The noni plant has been linked to the virtual elimination of squamous cell
+    notable_prose: The petty spurge has been linked to the virtual elimination of squamous cell
       skin cancer in Germany studies, and has approval from US FDA for treatment of actinic
       keratosis as a gel containing ingenol mebutate.
     prose_reviewed: true
-    diet_prose: The petty spurge does not consume food because it performs photosynthesis.
+    diet_prose: The petty spurge obtains its nutrients through photosynthesis.
   Euphorbia_serpens:
     reviewed: true
     source: wikipedia:Euphorbia serpens
@@ -562,7 +563,7 @@ blurbs:
     notable: famously believed to be the namesake of Hollywood, as early settlers named the
       area after its bright red berries that thrive in the hills, and is now the official
       city plant of Los Angeles
-    size_prose: The bamboo palm grows 2 to 5 meters tall and 2 to 4 meters wide.
+    size_prose: The Toyon grows 2 to 5 meters tall and 2 to 4 meters wide.
     appearance_prose: The Toyon is an evergreen shrub with leathery, serrated leaves and clusters
       of small white flowers that develop into bright red berries.
     behavior_prose: The Toyon has no notable behaviors.
@@ -570,7 +571,7 @@ blurbs:
       settlers named the area after its bright red berries that thrive in the hills, and is
       now the official city plant of Los Angeles.
     prose_reviewed: true
-    diet_prose: The Toyon is autotrophic.
+    diet_prose: The Toyon obtains its nutrients through photosynthesis.
   Hylephila_phyleus:
     reviewed: true
     source: wikipedia:Fiery skipper
@@ -593,7 +594,7 @@ blurbs:
       on its hindwing and forewing.
     behavior_prose: The Fiery Skipper is a rapid flyer that makes darting movements, and it
       holds its wings in a 'triangle' shape to absorb the sun's rays.
-    notable_prose: The Io moth caterpillar is a master of survival, creating horizontal, silk-lined
+    notable_prose: The Fiery Skipper caterpillar is a master of survival, creating horizontal, silk-lined
       tunnels at the base of lawn grass that are often too low for lawnmower blades to destroy.
     prose_reviewed: true
     diet_prose: The Fiery Skipper feeds on turfgrass, including Bermudagrass, creeping bentgrass,
@@ -613,13 +614,13 @@ blurbs:
     behavior: Nocturnal, but also fly during day; prefer flying at dusk and dawn
     notable: Much like actual hummingbirds, these moths have an incredibly fast wingbeat,
       allowing them to hover in place while feeding
-    size_prose: The monarch butterfly has a wingspan of 2 to 3 inches and is 2 to 3 inches
+    size_prose: The white-lined sphinx has a wingspan of 2 to 3 inches and is 2 to 3 inches
       long.
     appearance_prose: The white-lined sphinx has a forewing that is dark brown with a tan
       stripe and white lines, and a black hindwing with a pink median band.
     behavior_prose: The white-lined sphinx moth is nocturnal, but also flies during the day,
       prefers to fly at dusk, and also at dawn.
-    notable_prose: The hummingbird hawk moth has an incredibly fast wingbeat, allowing it
+    notable_prose: The white-lined sphinx moth has an incredibly fast wingbeat, allowing it
       to hover in place while feeding.
     prose_reviewed: true
     diet_prose: The white-lined sphinx is a species where adults feed on nectar from flowers,
@@ -650,6 +651,7 @@ blurbs:
   Laetiporus_gilbertsonii:
     reviewed: true
     source: wikipedia:Laetiporus gilbertsonii
+    common_name: Laetiporus gilbertsonii
     dangerous_to_humans: mild
     dangerous_to_pets: 'yes'
     size: 10-40 cm wide, 1-3 cm thick
@@ -669,7 +671,7 @@ blurbs:
     notable_prose: The Laetiporus gilbertsonii fungus changes from a vibrant fiery orange-yellow
       to a ghostly greyish-white color as it dries out and decays.
     prose_reviewed: true
-    diet_prose: The Laetiporus gilbertsonii is an organism that undergoes photosynthesis.
+    diet_prose: The Laetiporus gilbertsonii obtains its nutrients through photosynthesis.
   Leiothlypis_celata:
     reviewed: true
     source: wikipedia:Orange-crowned warbler
@@ -688,7 +690,7 @@ blurbs:
       seen by birders.
     size_prose: The Orange-crowned Warbler measures 12 to 14 centimeters in body length, with
       a wingspan of 20 to 25 centimeters.
-    appearance_prose: The Olive Warbler is an olive-grey bird with yellowish underparts that
+    appearance_prose: The Orange-crowned Warbler is an olive-grey bird with yellowish underparts that
       have faint streaking and a thin, pointed bill.
     behavior_prose: The Orange-crowned Warbler lacks wing bars, has a strong face marking,
       and does not have bright coloration, and it builds its nest on the ground under vegetation
@@ -714,14 +716,14 @@ blurbs:
       proteins.
     size_prose: The wild cucumber grows as a vine 1 to 8 meters long, producing fruit 5 to
       20 centimeters in length and 5 to 6 centimeters in diameter.
-    appearance_prose: The Virginia creeper has 5-7 lobed green leaves, spiraling tendrils,
+    appearance_prose: The wild cucumber has 5-7 lobed green leaves, spiraling tendrils,
       and small, yellowish-green to white, fragrant flowers that appear in early spring with
       high-climbing or sprawling, hairy stems.
     notable_prose: The wild cucumber is highly toxic to humans because all its parts contain
       cucurbitacins and ribosome-inactivating proteins.
     prose_reviewed: true
     behavior_prose: The wild cucumber has no notable behaviors.
-    diet_prose: The prickly pear cactus obtains its nutrients by photosynthesis.
+    diet_prose: The wild cucumber obtains its nutrients through photosynthesis.
   Melospiza_melodia:
     reviewed: true
     source: wikipedia:Song sparrow
@@ -765,7 +767,7 @@ blurbs:
     notable: One of the longest lifespans for any butterfly, with a lifespan of 11-12 months
     size_prose: The Mourning Cloak butterfly has a body length of 2 to 3 inches during its
       pupa stage.
-    appearance_prose: The Io moth is a species characterized by having black bodies with reddish-orange
+    appearance_prose: The Mourning Cloak is a species characterized by having black bodies with reddish-orange
       dots, black spines and white dots on its caterpillars, and tan or brown gray pupae with
       red-tipped spikes.
     behavior_prose: The Mourning Cloak migrates to Britain during summer and autumn, and is
@@ -800,7 +802,7 @@ blurbs:
     notable_prose: The Western jack-o'-lantern mushroom releases a vivid purple dye when boiled
       that can be used on wool and fabrics.
     prose_reviewed: true
-    diet_prose: The Indian pipe plant obtains its nutrients by photosynthesis.
+    diet_prose: The  Western jack-o'-lantern mushroom obtains its nutrients through photosynthesis.
   Otospermophilus_beecheyi:
     reviewed: true
     source: wikipedia:California ground squirrel
@@ -823,12 +825,12 @@ blurbs:
       with a tail of 13 to 23 centimeters and weighs between 280 to 740 grams.
     appearance_prose: The California ground squirrel has grayish-brown fur with white speckles,
       a bushy tail, and a white ring around each eye.
-    behavior_prose: The Arctic ground squirrel hibernates in colder parts of its range, is
+    behavior_prose: The California ground squirrel hibernates in colder parts of its range, is
       active year-round in warmer areas, and estivates for short periods during hot summers.
     notable_prose: The California ground squirrel increases blood flow to its bushy tail to
       make it warmer and appears larger in the infrared spectrum when wagging it.
     prose_reviewed: true
-    diet_prose: The African elephant is an herbivore that consumes seeds, grains, nuts, fruits,
+    diet_prose: The California ground squirrel is an herbivore that consumes seeds, grains, nuts, fruits,
       insects, and roots.
   Oxalis_pes-caprae:
     reviewed: true
@@ -847,8 +849,8 @@ blurbs:
       irritation in humans, and more severe symptoms in pets if ingested in large quantities
     size_prose: The African wood-sorrel or Bermuda buttercup grows 12 to 45 centimeters tall
       and 20 to 50 centimeters wide.
-    appearance_prose: The Bermuda buttercup has bright yellow, five-petaled flowers and clover-like
-      leaves with occasional distinct purplish or brown dots.
+    appearance_prose: The African wood-sorrel or Bermuda buttercup has bright yellow, 
+      five-petaled flowers and clover-like leaves with occasional distinct purplish or brown dots.
     behavior_prose: The African wood-sorrel or Bermuda buttercup has no notable behaviors.
     notable_prose: The African wood-sorrel or Bermuda buttercup contains oxalic acid, which
       can cause mild symptoms like stomach upset and skin irritation in humans, and more severe
@@ -873,11 +875,11 @@ blurbs:
       before turning bright green with large "eyespots"
     size_prose: The Western Tiger Swallowtail measures 4 to 5.5 centimeters in body length
       and has a wingspan of 7 to 10 centimeters.
-    appearance_prose: The monarch butterfly is brightly colored, yellow with black stripes
+    appearance_prose: The Western Tiger Swallowtail is brightly colored, yellow with black stripes
       and blue and orange spots near its tail.
     behavior_prose: The Western Tiger Swallowtail is an active butterfly that is rarely seen
       at rest, with males congregating near water to drink and extract minerals.
-    notable_prose: The Eastern Tiger Swallowtail's caterpillars start out looking exactly
+    notable_prose: The Western Tiger Swallowtail's caterpillars start out looking exactly
       like bird droppings to deter predators before turning bright green with large "eyespots".
     prose_reviewed: true
     diet_prose: The Western Tiger Swallowtail feeds on leaves of various trees, including
@@ -964,7 +966,7 @@ blurbs:
       and provides habitat and food for many species.
     notable_prose: The California live oak can live up to 1,000 years old.
     prose_reviewed: true
-    diet_prose: The prickly pear cactus obtains its nutrients through photosynthesis.
+    diet_prose: The California live oak obtains its nutrients through photosynthesis.
   Rhus_integrifolia:
     reviewed: true
     source: wikipedia:Rhus integrifolia
@@ -983,13 +985,13 @@ blurbs:
       fire-resistant, and makes an excellent privacy hedge
     size_prose: The lemonade sumac or berry bush measures 2 to 7 meters in height and 3 to
       7 meters in width.
-    appearance_prose: The Japanese holly is a dense, evergreen shrub or small tree with a
+    appearance_prose: The lemonade sumac or berry is a dense, evergreen shrub or small tree with a
       spreading, mounded form and dark green, leathery leaves with toothed edges.
     behavior_prose: The lemonade sumac or berry has no notable behaviors.
     notable_prose: The lemonade sumac or berry shrub is nearly indestructible, drought-tolerant,
       fire-resistant, and makes an excellent privacy hedge.
     prose_reviewed: true
-    diet_prose: The prickly pear cactus obtains its nutrients by photosynthesis.
+    diet_prose: The lemonade sumac or berry obtains its nutrients through photosynthesis.
   Salvia_mellifera:
     reviewed: true
     source: wikipedia:Salvia mellifera
@@ -1005,12 +1007,12 @@ blurbs:
     behavior: none
     notable: produces a rare and prized honey due to its dry climate
     size_prose: The Californian black sage grows 1 to 2 meters tall and 1 to 3 meters wide.
-    appearance_prose: The California black sage has dark green, wrinkled leaves and small,
+    appearance_prose: The Californian black sage has dark green, wrinkled leaves and small,
       whorled flowers in shades of pale blue, lavender, or white.
     behavior_prose: The Californian black sage has no notable behaviors.
-    notable_prose: The Italian honey bee produces a rare and prized honey due to its dry climate.
+    notable_prose: The Californian black sage produces a rare and prized honey due to its dry climate.
     prose_reviewed: true
-    diet_prose: The Californian black sage does not consume food because it undergoes photosynthesis.
+    diet_prose: The Californian black sage obtains its nutrients through photosynthesis.
   Sayornis_nigricans:
     reviewed: true
     source: wikipedia:Black phoebe
@@ -1107,11 +1109,11 @@ blurbs:
     notable: 45% of nests carried young not offspring of male partner
     size_prose: The Western bluebird measures 15 to 19 centimeters in length, with a wingspan
       of 29 to 34 centimeters and a weight of 24 to 31 grams.
-    appearance_prose: The indigo bunting is a male that is vibrant with a deep cobalt-blue
+    appearance_prose: The Western bluebird is a male that is vibrant with a deep cobalt-blue
       head, throat, and back, paired with a rusty-orange breast and grayish belly; females
       are much duller, with a gray-brown head and back, pale orange wash on the breast, and
       limited dull blue on the wings and tail.
-    behavior_prose: The peregrine falcon pounces on the ground for food and flies to catch
+    behavior_prose: The Western bluebird pounces on the ground for food and flies to catch
       aerial prey.
     notable_prose: The Western bluebird has a remarkable 45% of nests that carry young not
       the offspring of the male partner.
@@ -1137,11 +1139,10 @@ blurbs:
       fan-shaped foliage, and showy, star-shaped flowers that are typically violet-blue with
       darker veins and a bright yellow eye.
     behavior_prose: The western blue-eyed grass has no notable behaviors.
-    notable_prose: The California poppy has been used by the Ohlone to treat indigestion and
+    notable_prose: The western blue-eyed grass has been used by the Ohlone to treat indigestion and
       stomach pain with an infusion of its roots and leaves.
     prose_reviewed: true
-    diet_prose: The western blue-eyed grass has no diet, as it obtains its nutrients through
-      photosynthesis.
+    diet_prose: The western blue-eyed grass obtains its nutrients through photosynthesis.
   Spinus_psaltria:
     reviewed: true
     source: wikipedia:Lesser goldfinch
@@ -1239,7 +1240,7 @@ blurbs:
     notable_prose: The White Clover originated from two different species mating 28,000 years
       ago and has a rare four-leaf genetic mutation that occurs in about 1 in 10,000 plants.
     prose_reviewed: true
-    diet_prose: The Venus flytrap does not consume food because it undergoes photosynthesis.
+    diet_prose: The White Clover obtains its nutrients through photosynthesis.
   Tyrannus_vociferans:
     reviewed: true
     source: wikipedia:Cassin's kingbird
