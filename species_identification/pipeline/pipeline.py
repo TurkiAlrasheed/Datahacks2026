@@ -67,6 +67,13 @@ def _retrieve_fns():
 # suggested threshold when retrieve and refuse cases separate cleanly;
 # 0.55 is a reasonable starting default based on the harness bands.
 DEFAULT_RETRIEVAL_THRESHOLD = 0.55
+DIRECT_ROUTE_SCORE_THRESHOLD = 0.65  
+
+# Phrasings that signal the user wants prose, not a field lookup. Even when
+# the intent classifier is confident, "tell me about its X" almost always
+# refers to a sub-topic the structured field doesn't cover (courtship,
+# nesting, migration). Route these to retrieval regardless of confidence.
+OPEN_ENDED_PREFIXES = ("tell me about", "tell me more about")
 
 # How many chunks to ask the retriever for. We may keep fewer after the
 # threshold filter, and the prompt builder caps further at MAX_CHUNKS.
@@ -200,7 +207,6 @@ class RoboRangerPipeline:
         # 1. Wildlife gate
         t = time.perf_counter()
         gate_result = self.gate.check(query)
-        print(gate_result)
         latency["gate"] = time.perf_counter() - t
         if gate_result.reject:
             latency["total"] = time.perf_counter() - t0
@@ -261,25 +267,22 @@ class RoboRangerPipeline:
         # LLM entirely. Sub-millisecond instead of 12+ seconds. Falls
         # through to the LLM path when the formatter returns None (missing
         # field, or formatter decides the question needs synthesis).
-        if (
-            intent_result.confidence == "high"
-            and intent_result.intent in DIRECT_ROUTE_INTENTS
-        ):
-            t = time.perf_counter()
-            direct_text = self._format_from_blurb(intent_result.intent, blurb)
-            latency["format"] = time.perf_counter() - t
-            if direct_text is not None:
-                latency["total"] = time.perf_counter() - t0
-                return Response(
-                    text=direct_text,
-                    path="blurb_direct",
-                    species_id=species_id,
-                    query=query,
-                    gate=gate_result,
-                    intent=intent_result,
-                    blurb=blurb,
-                    latency=latency,
-                )
+        if self._should_direct_route(query, intent_result):
+                t = time.perf_counter()
+                direct_text = self._format_from_blurb(intent_result.intent, blurb)
+                latency["format"] = time.perf_counter() - t
+                if direct_text is not None:
+                    latency["total"] = time.perf_counter() - t0
+                    return Response(
+                        text=direct_text,
+                        path="blurb_direct",
+                        species_id=species_id,
+                        query=query,
+                        gate=gate_result,
+                        intent=intent_result,
+                        blurb=blurb,
+                        latency=latency,
+                    )
 
         # 4. Retrieval + threshold filter.
         t = time.perf_counter()
@@ -376,6 +379,31 @@ class RoboRangerPipeline:
                 source=category or "",
             ))
         return kept, dropped
+    
+    def _should_direct_route(self, query: str, intent_result: IntentResult) -> bool:
+        """
+        Direct-route is appropriate when:
+        - the query isn't open-ended ('tell me about its X' wants retrieval)
+        - the intent maps to a structured field we can format
+        - the classifier is confident enough:
+            * high confidence: always
+            * medium confidence: only if the cosine score clears the floor
+        """
+        if intent_result.intent not in DIRECT_ROUTE_INTENTS:
+            return False
+
+        q_lower = query.lower().strip()
+        if any(p in q_lower for p in OPEN_ENDED_PREFIXES):
+            return False
+
+        if intent_result.confidence == "high":
+            return True
+        if (
+            intent_result.confidence == "medium"
+            and intent_result.score >= DIRECT_ROUTE_SCORE_THRESHOLD
+        ):
+            return True
+        return False
     
     def _format_from_blurb(self, intent: Intent, blurb: Blurb) -> str | None:
         """
@@ -475,7 +503,6 @@ class RoboRangerPipeline:
         return None
 
     def _format_diet(self, blurb: Blurb) -> str | None:
-        print(blurb.prose_reviewed, blurb.diet_prose)
         if blurb.prose_reviewed and blurb.diet_prose:
             return blurb.diet_prose
         

@@ -45,12 +45,12 @@ class Intent(str, Enum):
 # sweet spot — more doesn't help much and dilutes the centroid.
 PROTOTYPES: dict[Intent, list[str]] = {
     Intent.DESCRIPTION: [
+        "what does it look like",
         "what does this animal look like",
-        "describe this species",
-        "tell me about it",
-        "what is this",
-        "give me an overview",
-        "what kind of animal is this",
+        "describe its appearance",
+        "what color is it",
+        "what are its markings",
+        "describe what I'm seeing",
     ],
     Intent.DANGER: [
         "is it venomous",
@@ -60,6 +60,9 @@ PROTOTYPES: dict[Intent, list[str]] = {
         "is it safe to approach",
         "can it bite",
         "should I be worried about this animal",
+        "can my dog eat this",
+        "can my pet eat this plant",
+        "will this make my dog sick",
     ],
     Intent.SIZE: [
         "how big is it",
@@ -94,6 +97,9 @@ PROTOTYPES: dict[Intent, list[str]] = {
         "is it active during the day",
         "does it live in groups",
         "how does it defend itself",
+        "tell me about its behavior",
+        "tell me about its courtship",
+        "tell me about its nesting",
     ],
     Intent.IDENTIFICATION: [
         "how do I tell it apart from similar species",

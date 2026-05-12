@@ -1,0 +1,347 @@
+# RoboRanger eval cases — expanded set.
+#
+# Tags use prefixes for filtering:
+#   direct_*       - direct-route intents (DIET, SIZE, HABITAT, BEHAVIOR,
+#                    DESCRIPTION, DANGER). Expected: blurb_direct.
+#   chunks_*       - questions structured fields can't answer. Expected:
+#                    blurb_plus_chunks.
+#   refusal_*      - off-topic. Expected: gate_rejected or intent_unclear.
+#   missing_*      - unknown species. Expected: species_not_found.
+#   plant_*        - plant-specific: photosynthesis diet, missing behavior.
+#   danger_*       - exercising every danger-combination branch.
+#   phrasing_*     - real-user weirdness (fragments, typos, conversational).
+#
+# Species coverage spans: mammals, birds (raptor, songbird, hummingbird),
+# insects (bee, beetle, butterfly), plants (toxic, benign, with behavior),
+# fungus, spider, reptile.
+
+cases:
+  # =========================================================================
+  # Direct route: DIET — animal, plant (photosynthesis), and insect
+  # =========================================================================
+  - tag: direct_diet_hawk
+    species_id: Buteo_lineatus
+    query: what does it eat
+    expected_path: blurb_direct
+    expected_intent: DIET
+
+  - tag: direct_diet_coyote
+    species_id: Canis_latrans
+    query: what does a coyote eat
+    expected_path: blurb_direct
+    expected_intent: DIET
+
+  - tag: direct_diet_phrasing_feed
+    species_id: Procyon_lotor
+    query: what does it feed on
+    expected_path: blurb_direct
+    expected_intent: DIET
+
+  - tag: direct_diet_plant_photosynthesis
+    species_id: Salvia_mellifera
+    query: what does this plant eat
+    expected_path: blurb_direct
+    expected_intent: DIET
+
+  - tag: direct_diet_oak
+    species_id: Quercus_agrifolia
+    query: how does it get nutrients
+    expected_path: blurb_direct
+    expected_intent: DIET
+
+  - tag: direct_diet_butterfly
+    species_id: Danaus_plexippus
+    query: what do monarchs eat
+    expected_path: blurb_direct
+    expected_intent: DIET
+
+  # =========================================================================
+  # Direct route: SIZE
+  # =========================================================================
+  - tag: direct_size_owl
+    species_id: Bubo_virginianus
+    query: how big does it get
+    expected_path: blurb_direct
+    expected_intent: SIZE
+
+  - tag: direct_size_hummingbird
+    species_id: Calypte_anna
+    query: how small is it
+    expected_path: blurb_direct
+    expected_intent: SIZE
+
+  - tag: direct_size_coyote
+    species_id: Canis_latrans
+    query: how heavy is a coyote
+    expected_path: blurb_direct
+    expected_intent: SIZE
+
+  - tag: direct_size_oak
+    species_id: Quercus_agrifolia
+    query: how tall does it grow
+    expected_path: blurb_direct
+    expected_intent: SIZE
+
+  # =========================================================================
+  # Direct route: HABITAT
+  # =========================================================================
+  - tag: direct_habitat_lizard
+    species_id: Sceloporus_occidentalis
+    query: where does it live
+    expected_path: blurb_direct
+    expected_intent: HABITAT
+
+  - tag: direct_habitat_raccoon
+    species_id: Procyon_lotor
+    query: where would I find it
+    expected_path: blurb_direct
+    expected_intent: HABITAT
+
+  - tag: direct_habitat_plant
+    species_id: Artemisia_californica
+    query: what kind of environment does it grow in
+    expected_path: blurb_direct
+    expected_intent: HABITAT
+
+  # =========================================================================
+  # Direct route: BEHAVIOR
+  # =========================================================================
+  - tag: direct_behavior_owl
+    species_id: Bubo_virginianus
+    query: is it nocturnal
+    expected_path: blurb_direct
+    expected_intent: BEHAVIOR
+
+  - tag: direct_behavior_raccoon
+    species_id: Procyon_lotor
+    query: when is it active
+    expected_path: blurb_direct
+    expected_intent: BEHAVIOR
+
+  - tag: direct_behavior_lizard
+    species_id: Sceloporus_occidentalis
+    query: how does it act
+    expected_path: blurb_direct
+    expected_intent: BEHAVIOR
+
+  # Plant with real behavior text — direct-route should work because the
+  # field is populated.
+  - tag: direct_behavior_plant_with_text
+    species_id: Quercus_agrifolia
+    query: how does this tree survive
+    expected_path: blurb_direct
+    expected_intent: BEHAVIOR
+
+  # =========================================================================
+  # Direct route: DESCRIPTION
+  # =========================================================================
+  - tag: direct_description_hawk
+    species_id: Buteo_lineatus
+    query: what does it look like
+    expected_path: blurb_direct
+    expected_intent: DESCRIPTION
+
+  - tag: direct_description_color
+    species_id: Calypte_anna
+    query: what color is it
+    expected_path: blurb_direct
+    expected_intent: DESCRIPTION
+
+  - tag: direct_description_markings
+    species_id: Danaus_plexippus
+    query: what are its markings
+    expected_path: blurb_direct
+    expected_intent: DESCRIPTION
+
+  # =========================================================================
+  # Direct route: DANGER — covers every combination
+  # =========================================================================
+  # no/no — common case (most plants, most small birds)
+  - tag: danger_no_no_sparrow
+    species_id: Melospiza_melodia
+    query: is it dangerous
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  - tag: danger_no_no_plant
+    species_id: Salvia_mellifera
+    query: is this plant safe to touch
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  # no/yes — raptors that prey on small pets
+  - tag: danger_no_yes_owl
+    species_id: Bubo_virginianus
+    query: is it dangerous to my cat
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  - tag: danger_no_yes_hawk
+    species_id: Buteo_lineatus
+    query: will it hurt my dog
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  # mild/mild — bees and similar
+  - tag: danger_mild_mild_honeybee
+    species_id: Apis_mellifera
+    query: will it sting
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  - tag: danger_mild_mild_bumblebee
+    species_id: Bombus_vosnesenskii
+    query: is the bumblebee dangerous
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  # yes/yes — coyote, raccoon, toxic plants
+  - tag: danger_yes_yes_coyote
+    species_id: Canis_latrans
+    query: should I be worried about coyotes
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  - tag: danger_yes_yes_raccoon
+    species_id: Procyon_lotor
+    query: is a raccoon dangerous
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  - tag: danger_yes_yes_toxic_plant
+    species_id: Euphorbia_maculata
+    query: is this plant poisonous
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  # mild/yes — spider that bites humans mildly, kills small pets
+  - tag: danger_mild_yes_spider
+    species_id: Steatoda_nobilis
+    query: should I worry about this spider
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  # mild/yes — fungus
+  - tag: danger_mild_yes_fungus
+    species_id: Laetiporus_gilbertsonii
+    query: is this mushroom safe
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  # mild/yes — invasive plant
+  - tag: danger_mild_yes_oxalis
+    species_id: Oxalis_pes-caprae
+    query: can my dog eat this plant
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  # =========================================================================
+  # Plant-specific edge cases
+  # =========================================================================
+  # Plants where behavior=="none" should fall through _format_behavior and
+  # land in retrieval.
+  - tag: plant_behavior_empty_falls_through
+    species_id: Salvia_mellifera
+    query: how does this plant behave
+    expected_path: blurb_direct
+
+  # =========================================================================
+  # Chunks path: open-ended questions needing retrieval
+  # =========================================================================
+  - tag: chunks_courtship_hawk
+    species_id: Buteo_lineatus
+    query: tell me about its courtship
+    expected_path: blurb_plus_chunks
+
+  - tag: chunks_migration_butterfly
+    species_id: Danaus_plexippus
+    query: tell me about its migration
+    expected_path: blurb_plus_chunks
+
+  - tag: chunks_lifespan_coyote
+    species_id: Canis_latrans
+    query: how long do coyotes live
+    expected_path: blurb_plus_chunks
+
+  - tag: chunks_nesting_owl
+    species_id: Bubo_virginianus
+    query: tell me about how it nests
+    expected_path: blurb_plus_chunks
+
+  - tag: chunks_history_oak
+    species_id: Quercus_agrifolia
+    query: how old can this tree get
+    expected_path: blurb_direct
+
+  # =========================================================================
+  # Real-user phrasings — conversational, fragments, typos
+  # =========================================================================
+  - tag: phrasing_fragment_eat
+    species_id: Canis_latrans
+    query: diet
+    expected_path: blurb_direct
+    expected_intent: DIET
+
+  - tag: phrasing_fragment_danger
+    species_id: Steatoda_nobilis
+    query: dangerous?
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  - tag: phrasing_conversational_bite
+    species_id: Apis_mellifera
+    query: hey is this thing gonna sting me
+    expected_path: blurb_direct
+    expected_intent: DANGER
+
+  - tag: phrasing_conversational_what
+    species_id: Calypte_anna
+    query: whats this little bird
+    expected_path: blurb_direct
+    expected_intent: DESCRIPTION
+
+  # =========================================================================
+  # Refusals
+  # =========================================================================
+  - tag: refusal_weather
+    species_id: Buteo_lineatus
+    query: what's the weather today
+    expected_path: gate_rejected
+
+  - tag: refusal_math
+    species_id: Buteo_lineatus
+    query: what is 2 plus 2
+    expected_path: gate_rejected
+
+  - tag: refusal_naming
+    species_id: Buteo_lineatus
+    query: what should I name it
+    expected_path: gate_rejected
+
+  - tag: refusal_joke
+    species_id: Buteo_lineatus
+    query: tell me a joke about it
+    expected_path: gate_rejected
+
+  - tag: refusal_bathroom
+    species_id: Canis_latrans
+    query: where is the nearest bathroom
+    expected_path: gate_rejected
+
+  - tag: refusal_hours
+    species_id: Canis_latrans
+    query: when does the park close
+    expected_path: gate_rejected
+
+  # =========================================================================
+  # Missing species
+  # =========================================================================
+  - tag: missing_species
+    species_id: Made_up_species
+    query: what does it eat
+    expected_path: species_not_found
+
+  - tag: missing_species_2
+    species_id: Tyrannosaurus_rex
+    query: is it dangerous
+    expected_path: species_not_found

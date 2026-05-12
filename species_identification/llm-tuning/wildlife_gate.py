@@ -58,12 +58,12 @@ WILDLIFE_PROTOTYPES = [
     "is it safe to approach",
     "is it from around here",
     "where would I find this species",
+    "where would I find this animal" ,
     "what does it do during the day",
     "when is it active",
     "what time of day is it active",
     "is it active at night",
     "what features should I look for",
-    "tell me more",
     "what should I know about it",
 ]
 
@@ -97,6 +97,10 @@ OFF_TOPIC_PROTOTYPES = [
     "hello there",
     "good morning",
     "tell me a joke",
+    "tell me a joke about it",          
+    "tell me a joke about this animal", 
+    "say something funny about it",     
+    "make a joke about it",             
     # Junk:
     "asdfasdf",
     "test test test",
