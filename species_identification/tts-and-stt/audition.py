@@ -55,10 +55,12 @@ import random
 import subprocess
 import sys
 import tempfile
+import wave
 from dataclasses import fields
 from pathlib import Path
 
 import yaml
+from piper import PiperVoice
 
 sys.path.insert(1, "../pipeline")
 sys.path.insert(2, "../llm-tuning")
@@ -198,12 +200,15 @@ def format_one(pipeline: RoboRangerPipeline, blurb: Blurb,
 # Piper invocation
 # ---------------------------------------------------------------------------
 
-def speak(text: str, voice: Path, save_to: Path | None) -> None:
+def speak(text: str, voice: PiperVoice, save_to: Path | None) -> None:
     """
     Synthesize `text` with piper. If save_to is given, write a WAV there;
     otherwise play through the system default device.
 
-    piper CLI reads text from stdin and writes WAV to --output_file.
+    `voice` is a pre-loaded PiperVoice — load once in main(), reuse for
+    every utterance. Avoids the ~4–5s ONNX-runtime cold start that the
+    `piper` CLI pays on every invocation, which is what made the
+    per-utterance latency unusable.
     """
     out_path: Path
     cleanup = False
@@ -215,14 +220,11 @@ def speak(text: str, voice: Path, save_to: Path | None) -> None:
         out_path = Path(tmp)
         cleanup = True
 
-    proc = subprocess.run(
-        ["piper", "--model", str(voice), "--output_file", str(out_path)],
-        input=text,
-        text=True,
-        capture_output=True,
-    )
-    if proc.returncode != 0:
-        print(f"  [piper error] {proc.stderr.strip()}", file=sys.stderr)
+    try:
+        with wave.open(str(out_path), "wb") as wav_file:
+            voice.synthesize_wav(text, wav_file)
+    except Exception as e:
+        print(f"  [piper error] {e}", file=sys.stderr)
         if cleanup:
             out_path.unlink(missing_ok=True)
         return
@@ -292,7 +294,7 @@ def audition_species(
     species_id: str,
     blurb: Blurb,
     intents: list[Intent],
-    voice: Path | None,
+    voice: PiperVoice | None,
     save_dir: Path | None,
     no_audio: bool,
 ) -> None:
@@ -346,7 +348,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--intent", choices=list(INTENT_LABELS.values()),
                    help="Only audition this one intent (default: all six).")
     p.add_argument("--voice", type=Path,
-                   default=Path.cwd() / "voices" / "en_US-lessac-medium.onnx",
+                   default=Path.cwd() / "voices" / "en_US-lessac-low.onnx",
                    help="Path to piper voice .onnx (or set PIPER_VOICE).")
     p.add_argument("--save", type=Path, metavar="DIR",
                    help="Save WAVs to DIR instead of playing.")
@@ -369,6 +371,20 @@ def main() -> int:
     if args.voice and not args.voice.exists():
         print(f"error: voice file {args.voice} not found", file=sys.stderr)
         return 1
+
+    # Load the voice once up front. The CLI piper binary pays ~4–5s of
+    # ONNX-runtime + model load on every invocation; loading the
+    # PiperVoice once and reusing it keeps per-utterance latency at
+    # actual-synthesis time. This is also the failure point that tells
+    # us early if the .onnx / .onnx.json pair is broken or missing.
+    voice_obj: PiperVoice | None = None
+    if not args.no_audio:
+        try:
+            voice_obj = PiperVoice.load(str(args.voice))
+        except Exception as e:
+            print(f"error: failed to load voice {args.voice}: {e}",
+                  file=sys.stderr)
+            return 1
 
     # Load blurbs from the requested source.
     if args.source == "yaml":
@@ -422,7 +438,7 @@ def main() -> int:
             species_id=species_id,
             blurb=blurbs[species_id],
             intents=intents,
-            voice=args.voice,
+            voice=voice_obj,
             save_dir=args.save,
             no_audio=args.no_audio,
         )
