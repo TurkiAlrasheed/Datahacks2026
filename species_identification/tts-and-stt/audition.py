@@ -206,7 +206,7 @@ def speak(text: str, voice: PiperVoice, save_to: Path | None) -> None:
     otherwise play through the system default device.
 
     `voice` is a pre-loaded PiperVoice — load once in main(), reuse for
-    every utterance. Avoids the ~4–5s ONNX-runtime cold start that the
+    every utterance. Avoids the ~4-5s ONNX-runtime cold start that the
     `piper` CLI pays on every invocation, which is what made the
     per-utterance latency unusable.
     """
@@ -222,7 +222,7 @@ def speak(text: str, voice: PiperVoice, save_to: Path | None) -> None:
 
     try:
         with wave.open(str(out_path), "wb") as wav_file:
-            voice.synthesize_wav(text, wav_file)
+            voice.synthesize_wav("-" + text, wav_file)
     except Exception as e:
         print(f"  [piper error] {e}", file=sys.stderr)
         if cleanup:
