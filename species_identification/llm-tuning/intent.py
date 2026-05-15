@@ -51,6 +51,10 @@ PROTOTYPES: dict[Intent, list[str]] = {
         "what color is it",
         "what are its markings",
         "describe what I'm seeing",
+        "what is this species known for",
+        "what kind of animal is this",
+        "tell me about this animal",
+        "what is this species",
     ],
     Intent.DANGER: [
         "is it venomous",
@@ -63,6 +67,7 @@ PROTOTYPES: dict[Intent, list[str]] = {
         "can my dog eat this",
         "can my pet eat this plant",
         "will this make my dog sick",
+        "is it a predator",
     ],
     Intent.SIZE: [
         "how big is it",
@@ -76,7 +81,6 @@ PROTOTYPES: dict[Intent, list[str]] = {
     Intent.DIET: [
         "what does it eat",
         "what is its diet",
-        "is it a predator",
         "is it a herbivore",
         "what does it hunt",
         "what does it feed on",
