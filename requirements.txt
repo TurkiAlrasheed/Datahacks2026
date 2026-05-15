@@ -1,0 +1,20 @@
+# On-device runtime dependencies for the Arduino UNO Q.
+# Install with: pip install --break-system-packages -r requirements.txt
+#
+# See requirements-build.txt for laptop-only tools (corpus building,
+# model export) that do NOT need to be installed on the device.
+
+# --- Inference ---
+numpy>=1.26
+opencv-python>=4.9        # cv2: camera capture + frame preprocessing in live_inference.py
+ai-edge-litert>=0.0.1     # TFLite interpreter (Google's official package for on-device inference)
+
+# --- Voice I/O ---
+sounddevice>=0.4          # mic recording in voice_loop.py / ptt_whisper.py
+pywhispercpp>=1.0         # whisper.cpp Python bindings (STT)
+piper-tts>=1.2            # Piper TTS (synthesize to WAV; plays via aplay/afplay)
+
+# --- RAG pipeline ---
+sentence-transformers>=2.6  # query embeddings for corpus retrieval (bge-small-en-v1.5)
+sqlite-vec>=0.1.1            # vector similarity search inside SQLite
+pyyaml>=6.0                  # YAML config loading (audition.py, pipeline configs)
