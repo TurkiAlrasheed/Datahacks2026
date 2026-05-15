@@ -50,6 +50,7 @@ import tempfile
 import time
 import wave
 from pathlib import Path
+from species_identification.tests.mem_check import print_total_rss, growth_check
 
 import numpy as np
 
@@ -251,6 +252,8 @@ def voice_repl(pipeline: RoboRangerPipeline, species_id: str,
     """
     print(f"\nvoice loop ready — species: {species_id}")
     print("Ctrl-C to exit.\n")
+    
+    print_total_rss(label="after warmup")
 
     while True:
         try:
@@ -278,7 +281,7 @@ def voice_repl(pipeline: RoboRangerPipeline, species_id: str,
 
             # --- TTS: speech out ------------------------------------------
             t_tts = time.perf_counter()
-            speak(voice, resp.text)
+            speak(voice, "-" + resp.text)
             tts_s = time.perf_counter() - t_tts
 
             total_voice_s = stt_s + resp.latency.get("total", 0.0) + tts_s
@@ -375,6 +378,7 @@ def main() -> int:
     t = time.perf_counter()
     pipeline.answer(args.species, "warmup query, ignore")
     print(f"({(time.perf_counter() - t) * 1000:.0f}ms)")
+    growth_check(pipeline, args.species, n=12)
 
     return voice_repl(pipeline, args.species, whisper_model, voice)
 

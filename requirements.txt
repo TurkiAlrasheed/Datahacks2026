@@ -5,16 +5,21 @@
 # model export) that do NOT need to be installed on the device.
 
 # --- Inference ---
-numpy>=1.26
-opencv-python>=4.9        # cv2: camera capture + frame preprocessing in live_inference.py
-ai-edge-litert>=0.0.1     # TFLite interpreter (Google's official package for on-device inference)
+numpy==2.1.3
+opencv-python==4.13.0.92  # cv2: camera capture + frame preprocessing in live_inference.py
+ai-edge-litert==2.1.4     # TFLite interpreter (Google's official package for on-device inference)
 
 # --- Voice I/O ---
-sounddevice>=0.4          # mic recording in voice_loop.py / ptt_whisper.py
-pywhispercpp>=1.0         # whisper.cpp Python bindings (STT)
-piper-tts>=1.2            # Piper TTS (synthesize to WAV; plays via aplay/afplay)
+sounddevice==0.5.5          # mic recording in voice_loop.py / ptt_whisper.py
+pywhispercpp==1.4.1         # whisper.cpp Python bindings (STT)
+piper-tts==1.4.2            # Piper TTS (synthesize to WAV; plays via aplay/afplay)
+psutil==7.2.2               # system resource monitoring (voice_loop.py)
 
-# --- RAG pipeline ---
-sentence-transformers>=2.6  # query embeddings for corpus retrieval (bge-small-en-v1.5)
-sqlite-vec>=0.1.1            # vector similarity search inside SQLite
-pyyaml>=6.0                  # YAML config loading (audition.py, pipeline configs)
+# --- RAG pipeline ---             
+sentence-transformers==5.4.1 # query embeddings for corpus retrieval (bge-small-en-v1.5)
+torch==2.11.0                # required by sentence-transformers; pin explicitly
+transformers==5.6.0
+tokenizers==0.22.2
+huggingface_hub==1.11.0
+sqlite-vec==0.1.9            # vector similarity search inside SQLite
+pyyaml==6.0.3                # YAML config loading (audition.py, pipeline configs)
