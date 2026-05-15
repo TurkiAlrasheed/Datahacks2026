@@ -93,7 +93,7 @@ MSG_SPECIES_NOT_FOUND = (
 # it", "how rare is this in movies" — which are wildlife-adjacent enough
 # to pass the gate but not real field-guide questions.
 MSG_INTENT_UNCLEAR = (
-    "I'm not sure I understand, I am limited to questions about the wildlife."
+    "I'm not sure I understand, I am limited to questions about the wildlife. "
     "Try asking what it eats, where it lives, "
     "whether it's dangerous, or something along those lines."
 )
