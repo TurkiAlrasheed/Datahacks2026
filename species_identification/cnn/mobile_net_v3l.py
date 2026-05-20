@@ -47,10 +47,10 @@ from tensorflow.keras import layers
 # ---------------------------------------------------------------------------
 # Config — tune these
 # ---------------------------------------------------------------------------
-DATA_DIR        = "../ucsd-data"               # folder-per-class root
-OUTPUT_DIR      = "../outputs"            # where models + logs go
-IMG_SIZE        = 224                  # MobileNetV3-Small standard input
-BATCH_SIZE      = 32                   # CPU-friendly; drop to 16 if RAM-tight
+DATA_DIR        = "../ucsd-data"       # folder-per-class root
+OUTPUT_DIR      = "../outputs"         # where models + logs go
+IMG_SIZE        = 320                  # MobileNetV3-Large standard input
+BATCH_SIZE      = 16                   
 SEED            = 42
 
 # Split ratios
@@ -354,7 +354,7 @@ def apply_mixup_cutmix(ds, num_classes, alpha=0.2, prob=0.5):
 
 
 # ---------------------------------------------------------------------------
-# 4. Model — MobileNetV3-Small with ImageNet weights + custom head.
+# 4. Model — MobileNetV3-Large with ImageNet weights + custom head.
 #    IMPORTANT: Keras' MobileNetV3 already includes a Rescaling layer
 #    internally, so we feed it raw [0, 255] pixel values. Do NOT normalize
 #    manually — doing so halves accuracy.
@@ -382,10 +382,155 @@ def build_model(num_classes, augment):
     model = keras.Model(inputs, outputs, name="mobilenetv3large_lajolla")
     return model, backbone
 
+# ---------------------------------------------------------------------------
+# Sanity checks to run BEFORE the full retrain (5 minutes total).
+#
+# 1. Confirm the model builds at 320x320 and ImageNet weights load:
+# ---------------------------------------------------------------------------
+def smoke_test_build():
+    """Quick check that everything wires up at the new resolution."""
+ 
+    # Just build the model, don't train.
+    aug = keras.Sequential([layers.RandomFlip("horizontal")], name="augment")
+    inputs = keras.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
+    x = aug(inputs)
+    backbone = keras.applications.MobileNetV3Large(
+        input_shape=(IMG_SIZE, IMG_SIZE, 3),
+        include_top=False,
+        weights="imagenet",
+        include_preprocessing=True,
+        pooling="avg",
+    )
+    x = backbone(x, training=False)
+    outputs = layers.Dense(51)(x)
+    model = keras.Model(inputs, outputs)
+ 
+    # Pass a dummy batch through to verify shapes flow.
+    dummy = tf.random.uniform([2, IMG_SIZE, IMG_SIZE, 3],
+                              minval=0, maxval=255)
+    out = model(dummy, training=False)
+    print(f"Input shape:  {dummy.shape}")
+    print(f"Output shape: {out.shape}")
+    print(f"Total params: {model.count_params():,}")
+    assert out.shape == (2, 51), "output shape mismatch"
+    print("OK: model builds and runs at 320x320.")
+ 
+    # Approximate the per-image FLOPs increase. MobileNetV3-Large at 224
+    # is ~0.22 GFLOPs. At 320 it's ~(320/224)^2 ≈ 2.04x = ~0.45 GFLOPs.
+    # On your Uno Q's Cortex-A53, expect inference latency to roughly double.
+    ratio = (IMG_SIZE / 224.0) ** 2
+    print(f"FLOPs ratio vs 224x224: {ratio:.2f}x")
+ 
+ 
+# ---------------------------------------------------------------------------
+# 2. Confirm a single batch loads at the new resolution.
+# ---------------------------------------------------------------------------
+def smoke_test_data():
+    """Peek at one training batch to confirm image shape and label shape."""
+    split_root, class_names = build_splits(DATA_DIR)
+    train_ds, val_ds, test_ds = make_datasets(split_root, class_names)
+    for imgs, labels in train_ds.take(1):
+        print(f"Batch images shape: {imgs.shape}")  # expect (16, 320, 320, 3)
+        print(f"Batch labels shape: {labels.shape}")  # expect (16, num_classes)
+        print(f"Image dtype: {imgs.dtype}, range: "
+              f"[{tf.reduce_min(imgs).numpy():.1f}, "
+              f"{tf.reduce_max(imgs).numpy():.1f}]")
+        assert imgs.shape[1:3] == (IMG_SIZE, IMG_SIZE), "wrong input size"
+        print("OK: data loads at 320x320.")
+        break
+
 
 # ---------------------------------------------------------------------------
 # 5. Training
+# 
+# Experiment: Compute per-class weights from the training split.
+#    Call this AFTER build_splits() and BEFORE the training loop.
 # ---------------------------------------------------------------------------
+def compute_class_weights(split_root, class_names, beta=0.9999):
+    """Effective-number-of-samples class weighting (Cui et al., CVPR 2019).
+ 
+        w_c = (1 - beta) / (1 - beta^n_c)
+ 
+    where n_c is the count of class c in the training split. As n_c grows,
+    the weight saturates — this is what makes it more stable than 1/n_c on
+    small datasets.
+ 
+    beta controls how aggressive the reweighting is:
+        beta = 0     -> uniform weights (no reweighting)
+        beta = 0.9   -> mild reweighting
+        beta = 0.99  -> moderate
+        beta = 0.999 -> strong (recommended start)
+        beta = 0.9999 -> very strong; good for our imbalance ratios
+ 
+    For your dataset: Junco has 27 test examples (so ~125 train), most
+    species have ~12-13 test (~60 train), and seashore has 139 test
+    (~650 train). That's a ~10x imbalance. beta=0.9999 reduces it to
+    roughly 2x effective weight after reweighting — enough to help,
+    not so much that minority classes dominate.
+ 
+    The weights are normalized so the mean weight is 1.0, which keeps
+    the effective learning rate roughly unchanged.
+    """
+    import pathlib
+ 
+    train_root = pathlib.Path(split_root) / "train"
+    counts = np.array([
+        len(list((train_root / cname).iterdir()))
+        for cname in class_names
+    ], dtype=np.float64)
+ 
+    print(f"\nTrain split class counts:")
+    print(f"  min:    {int(counts.min())} ({class_names[counts.argmin()]})")
+    print(f"  max:    {int(counts.max())} ({class_names[counts.argmax()]})")
+    print(f"  median: {int(np.median(counts))}")
+    print(f"  ratio:  {counts.max() / counts.min():.1f}x")
+ 
+    # Effective number of samples per class.
+    eff_num = 1.0 - np.power(beta, counts)
+    weights = (1.0 - beta) / np.maximum(eff_num, 1e-12)
+ 
+    # Normalize so mean weight = 1.0. Keeps the loss magnitude comparable
+    # to the unweighted version, so existing learning rates still work.
+    weights = weights / weights.mean()
+ 
+    print(f"\nClass weights (beta={beta}):")
+    print(f"  min:    {weights.min():.3f} ({class_names[weights.argmin()]})")
+    print(f"  max:    {weights.max():.3f} ({class_names[weights.argmax()]})")
+    print(f"  ratio:  {weights.max() / weights.min():.2f}x "
+          f"(was {counts.max() / counts.min():.1f}x before reweighting)")
+    return weights.astype(np.float32)
+ 
+ 
+# ---------------------------------------------------------------------------
+# Experiment: Attach per-example sample weights to the dataset.
+#    Apply AFTER MixUp/CutMix so the mixed labels are accounted for
+#    proportionally. Sample weight for a mixed example is the weighted
+#    average of its two source classes' weights, which falls out naturally
+#    from a dot product with the soft label.
+# ---------------------------------------------------------------------------
+def attach_sample_weights(ds, class_weights):
+    """Map a (images, labels) dataset to (images, labels, sample_weights).
+ 
+    For one-hot labels: sample_weight = dot(label, class_weights).
+        Pure class c -> weight = class_weights[c].
+    For MixUp/CutMix soft labels (e.g. 0.7 of class a + 0.3 of class b):
+        sample_weight = 0.7 * w_a + 0.3 * w_b.
+    This is the right thing — a mixed example contributes proportionally
+    to whichever classes it represents.
+ 
+    Keras' loss accepts sample_weight per example; it multiplies the
+    per-example loss by this scalar before reducing.
+    """
+    weights_tensor = tf.constant(class_weights, dtype=tf.float32)
+ 
+    def _attach(imgs, labels):
+        # labels shape: (batch, num_classes). Dot with weights -> (batch,).
+        sw = tf.reduce_sum(labels * weights_tensor[None, :], axis=1)
+        return imgs, labels, sw
+ 
+    return ds.map(_attach, num_parallel_calls=tf.data.AUTOTUNE)
+
+
 def compile_model(model, lr, num_classes, label_smoothing=None):
     """Compile with configurable label smoothing.
 
@@ -455,26 +600,22 @@ def train():
     split_root, class_names = build_splits(DATA_DIR)
     num_classes = len(class_names)
     train_ds, val_ds, test_ds = make_datasets(split_root, class_names)
-
-    # Save class-name mapping — you'll need this at inference time on the Uno Q.
+ 
     with open(os.path.join(OUTPUT_DIR, "class_names.json"), "w") as f:
         json.dump(class_names, f, indent=2)
-
-    # Keep a clean training dataset (no MixUp/CutMix) for the calibration
-    # phase. Calibration needs honest, hard labels — mixed labels defeat
-    # the purpose of training the model to be confident.
+ 
+    # Keep a clean training dataset (no MixUp/CutMix) for the calibration phase.
+    # Just prefetch — no sample weighting.
     clean_train_ds = train_ds.prefetch(tf.data.AUTOTUNE)
-
-    # Attach MixUp/CutMix to the main training pipeline only. Not applied
-    # to val/test because those need clean labels for honest evaluation.
-    train_ds = apply_mixup_cutmix(train_ds, num_classes,
-                                  alpha=0.2, prob=0.5)
+ 
+    # Apply MixUp/CutMix to the training dataset.
+    train_ds = apply_mixup_cutmix(train_ds, num_classes, alpha=0.2, prob=0.5)
     train_ds = train_ds.prefetch(tf.data.AUTOTUNE)
-
+ 
     augment = build_augmentation()
     model, backbone = build_model(num_classes, augment)
     model.summary()
-
+ 
     callbacks = [
         keras.callbacks.ModelCheckpoint(
             os.path.join(OUTPUT_DIR, "best.keras"),
@@ -490,36 +631,28 @@ def train():
         ),
         keras.callbacks.CSVLogger(os.path.join(OUTPUT_DIR, "history.csv")),
     ]
-
+ 
     # -------- Phase 1: head-only --------
     print("\n=== Phase 1: training classifier head (backbone frozen) ===")
     compile_model(model, LR_HEAD, num_classes)
     model.fit(train_ds, validation_data=val_ds,
               epochs=EPOCHS_HEAD, callbacks=callbacks)
-
+ 
     # -------- Phase 2: fine-tune top of backbone --------
     print("\n=== Phase 2: fine-tuning top of backbone ===")
     backbone.trainable = True
     for layer in backbone.layers[:UNFREEZE_FROM]:
         layer.trainable = False
-    # BatchNorm layers should usually stay in inference mode when fine-tuning
-    # on tiny datasets — their running stats are better than what you'd
-    # estimate from small training batches.
     for layer in backbone.layers:
         if isinstance(layer, layers.BatchNormalization):
             layer.trainable = False
-
+ 
     compile_model(model, LR_FT, num_classes)
     model.fit(train_ds, validation_data=val_ds,
               epochs=EPOCHS_FT, callbacks=callbacks)
-
+ 
     # -------- Phase 3: confidence calibration --------
-    # Final few epochs with no label smoothing and no MixUp/CutMix.
-    # Model has already learned to classify; here it learns to be
-    # confident on clean examples. Very low LR so accuracy doesn't drift.
     print("\n=== Phase 3: confidence calibration (no label smoothing) ===")
-    # Remove MixUp/CutMix stochasticity from checkpointing — we want the
-    # calibration-phase best, not the earlier phase's best.
     calib_callbacks = [
         keras.callbacks.ModelCheckpoint(
             os.path.join(OUTPUT_DIR, "best.keras"),
@@ -530,20 +663,20 @@ def train():
     compile_model(model, LR_CALIB, num_classes, label_smoothing=0.0)
     model.fit(clean_train_ds, validation_data=val_ds,
               epochs=EPOCHS_CALIB, callbacks=calib_callbacks)
-
+ 
     # -------- Temperature scaling --------
     print("\n=== Fitting temperature scaling on validation split ===")
     T = fit_temperature(model, val_ds)
     with open(os.path.join(OUTPUT_DIR, "temperature.json"), "w") as f:
         json.dump({"temperature": T}, f, indent=2)
-
+ 
     # -------- Evaluate --------
     print("\n=== Test evaluation ===")
     results = model.evaluate(test_ds, return_dict=True)
     print(results)
     with open(os.path.join(OUTPUT_DIR, "test_results.json"), "w") as f:
         json.dump(results, f, indent=2)
-
+ 
     model.save(os.path.join(OUTPUT_DIR, "final.keras"))
     return model, test_ds, class_names
 
@@ -585,5 +718,20 @@ def export_tflite(model, test_ds):
 
 
 if __name__ == "__main__":
+    # Run smoke tests first, then training.
+    print("=" * 60)
+    print("Smoke test 1: model build at 320x320")
+    print("=" * 60)
+    smoke_test_build()
+ 
+    print("\n" + "=" * 60)
+    print("Smoke test 2: data loads at 320x320")
+    print("=" * 60)
+    smoke_test_data()
+ 
+    print("\n" + "=" * 60)
+    print("Smoke tests passed. Training would start here.")
+    print("=" * 60)
+
     model, test_ds, class_names = train()
     export_tflite(model, test_ds)

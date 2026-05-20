@@ -1,0 +1,127 @@
+[
+  {
+    "count": 3,
+    "true": "Spinus_psaltria",
+    "pred": "Tyrannus_vociferans"
+  },
+  {
+    "count": 3,
+    "true": "Sialia_mexicana",
+    "pred": "Junco_hyemalis"
+  },
+  {
+    "count": 3,
+    "true": "Junco_hyemalis",
+    "pred": "Sayornis_nigricans"
+  },
+  {
+    "count": 3,
+    "true": "Euphorbia_maculata",
+    "pred": "Euphorbia_serpens"
+  },
+  {
+    "count": 3,
+    "true": "Dione_vanillae",
+    "pred": "Danaus_plexippus"
+  },
+  {
+    "count": 3,
+    "true": "Buteo_lineatus",
+    "pred": "Melospiza_melodia"
+  },
+  {
+    "count": 2,
+    "true": "Zenaida_macroura",
+    "pred": "Junco_hyemalis"
+  },
+  {
+    "count": 2,
+    "true": "Tyrannus_vociferans",
+    "pred": "Sialia_mexicana"
+  },
+  {
+    "count": 2,
+    "true": "Trifolium_repens",
+    "pred": "Apis_mellifera"
+  },
+  {
+    "count": 2,
+    "true": "Spinus_psaltria",
+    "pred": "Junco_hyemalis"
+  },
+  {
+    "count": 2,
+    "true": "Sayornis_nigricans",
+    "pred": "Junco_hyemalis"
+  },
+  {
+    "count": 2,
+    "true": "Procyon_lotor",
+    "pred": "Sceloporus_occidentalis"
+  },
+  {
+    "count": 2,
+    "true": "Oxalis_pes-caprae",
+    "pred": "Euphorbia_peplus"
+  },
+  {
+    "count": 2,
+    "true": "Harmonia_axyridis",
+    "pred": "Cotinis_mutabilis"
+  },
+  {
+    "count": 2,
+    "true": "Euphorbia_peplus",
+    "pred": "Oxalis_pes-caprae"
+  },
+  {
+    "count": 2,
+    "true": "Eriogonum_fasciculatum",
+    "pred": "Salvia_mellifera"
+  },
+  {
+    "count": 2,
+    "true": "Buteo_lineatus",
+    "pred": "Bubo_virginianus"
+  },
+  {
+    "count": 2,
+    "true": "Bubo_virginianus",
+    "pred": "Sialia_mexicana"
+  },
+  {
+    "count": 2,
+    "true": "Allograpta_obliqua",
+    "pred": "Apis_mellifera"
+  },
+  {
+    "count": 1,
+    "true": "Zenaida_macroura",
+    "pred": "Tyrannus_vociferans"
+  },
+  {
+    "count": 1,
+    "true": "Zenaida_macroura",
+    "pred": "Sialia_mexicana"
+  },
+  {
+    "count": 1,
+    "true": "Zenaida_macroura",
+    "pred": "Sceloporus_occidentalis"
+  },
+  {
+    "count": 1,
+    "true": "Zenaida_macroura",
+    "pred": "Omphalotus_olivascens"
+  },
+  {
+    "count": 1,
+    "true": "Tyrannus_vociferans",
+    "pred": "Spinus_psaltria"
+  },
+  {
+    "count": 1,
+    "true": "Tyrannus_vociferans",
+    "pred": "Leiothlypis_celata"
+  }
+]

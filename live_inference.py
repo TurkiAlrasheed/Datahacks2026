@@ -48,14 +48,15 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Config — same defaults as live_inference.py
 # ---------------------------------------------------------------------------
-MODEL_PATH      = "model_int8.tflite"
-CLASSES_PATH    = "class_names.json"
-TEMP_PATH       = "temperature.json"   # optional — T=1.0 if missing
-LOG_PATH        = "predictions_tta.csv"
-CAPTURE_DIR     = "captures_tta"
+MAIN_DIR        = "species_identification/outputs/"
+MODEL_PATH      = MAIN_DIR + "model_int8.tflite"
+CLASSES_PATH    = MAIN_DIR + "class_names.json"
+TEMP_PATH       = MAIN_DIR + "temperature.json"   # optional — T=1.0 if missing
+LOG_PATH        = MAIN_DIR + "predictions_tta.csv"
+CAPTURE_DIR     = MAIN_DIR + "captures_tta"
 
-CAMERA_INDEX    = 0
-IMG_SIZE        = 224
+CAMERA_INDEX    = 1            # laptop external webcam is 1, built-in / Uno Q is 0
+IMG_SIZE        = 320
 TOP_K           = 5
 CONF_THRESH     = 0.15
 INFER_HZ        = 2.0          # TTA uses 4x inferences — keep rate modest
