@@ -4,7 +4,7 @@ RoboRanger is a portable, hardware-based eco tour guide built for DataHacks 2026
 
 Target hardware: **Arduino UNO Q** (Linux Debian, quad-core SoC, Python 3.11).
 
-Devpost: https://devpost.com/software/roboranger?ref_content=my-projects-tab&ref_feature=my_projects
+Devpost: https://devpost.com/software/roboranger
 
 ---
 
