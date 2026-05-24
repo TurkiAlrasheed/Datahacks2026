@@ -147,14 +147,24 @@ python TourGuide_Agent/demo.py image.jpg    # open with a first sighting
 
 ### Running the cloud server
 
+**Terminal 1 — server:**
+
 ```bash
-cd TourGuide_Agent
+cd ~/Desktop/Datahacks2026/TourGuide_Agent
 uvicorn server:app --host 0.0.0.0 --port 8000
 ```
 
-Point the Arduino client at the server by setting `CLASSIFIER_URL` in `.env`.
+**Terminal 2 — ngrok tunnel:**
 
----
+```bash
+ngrok http 8000
+```
+
+**Arduino UNO Q:**
+
+```bash
+sudo SERVER_URL=https://<ngrok-url> python3 arduino_client.py --camera 2 --mic-device hw:0,0
+```
 
 ## Key design decisions
 
