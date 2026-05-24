@@ -1,5 +1,5 @@
 """
-RoboRanger voice loop — push-to-talk STT + TTS wrapped around the pipeline,
+RoboRanger loop — image classification + push-to-talk STT + TTS wrapped around the pipeline,
 with one-shot species identification at session start.
 
 This is the audio front-end / back-end. It does NOT touch pipeline.answer():
@@ -7,7 +7,7 @@ that stays a pure (species_id, query) -> Response function with no I/O, so
 it stays testable and run_pipeline.py keeps working unchanged. All the
 microphone / speaker / camera / model-loading I/O lives here, at the edges:
 
-    camera frame   ->  MobileNetV3 (TTA)  ->  species_id   (CV in, once)
+    camera frame   ->  MobileNetV2 (TTA)  ->  species_id   (CV in, once)
     button down/up ->  record audio       ->  STT in
     whisper        ->  query string
     pipeline.answer->  Response                              (UNCHANGED core)
@@ -19,12 +19,12 @@ latency budget intact (no ~1s camera+TTA on every button press).
 
 Usage:
     # Identify from camera, then chat:
-    python voice_loop.py \\
+    python full_roboranger_run.py \\
         --voice voices/en_US-lessac-low.onnx \\
         --whisper-model models/ggml-tiny.en-q5_1.bin
 
     # Override classifier (e.g. for testing without a camera):
-    python voice_loop.py --species Marah_macrocarpa \\
+    python full_roboranger_run.py --species Marah_macrocarpa \\
         --voice voices/en_US-lessac-low.onnx \\
         --whisper-model models/ggml-tiny.en-q5_1.bin
 
@@ -32,8 +32,9 @@ Requirements:
     pip install sounddevice numpy pywhispercpp piper-tts opencv-python \\
                 ai-edge-litert
     A piper voice .onnx (+ .onnx.json sibling).
+    Ollama installed and running (when on ollama backend).
     A whisper.cpp ggml model (ggml-tiny.en-q5_1.bin recommended).
-    A trained model_int8.tflite + class_names.json + (optional) temperature.json.
+    A trained model_*.tflite + class_names.json + (optional) temperature.json.
 
 Press-to-talk prototype: this uses <enter> as the button (press to start
 recording, press again to stop). On the device, swap record_utterance()
@@ -92,7 +93,7 @@ from pipeline import RoboRangerPipeline, Response
 # The classifier lives in live_inference.py. We import the class only —
 # the if __name__ == "__main__" guard there keeps the standalone loop
 # from running on import.
-from live_inference import TFLiteClassifierTTA
+from live_inference_mv3 import TFLiteClassifierTTA
 
 
 # ---------------------------------------------------------------------------
@@ -604,6 +605,34 @@ def main() -> int:
     # Two paths: --species override (laptop dev, no camera) OR identify
     # from a single camera frame. Failure here speaks an apology and
     # exits — the loop won't start with an unknown species.
+    #
+    # Performance note: while the user is pointing the camera and we're
+    # running the classifier (~1-2s), the pipeline + whisper builds run on
+    # background threads. They almost always finish before identification
+    # does, hiding several seconds of latency behind work the user is
+    # already waiting for. The threads write into a shared dict and we
+    # join them right before entering the voice loop.
+    import threading
+
+    background: dict[str, object] = {}
+    background_errors: dict[str, BaseException] = {}
+
+    def _load_whisper_bg():
+        try:
+            t = time.perf_counter()
+            background["whisper"] = WhisperModel(
+                str(args.whisper_model), n_threads=args.whisper_threads)
+            background["whisper_load_s"] = time.perf_counter() - t
+        except BaseException as e:
+            background_errors["whisper"] = e
+
+    # Kick off whisper load only — pipeline build has thread-bound sqlite
+    # connections, so we have to build it on the main thread.
+    print("loading whisper in background...", flush=True)
+    whisper_thread = threading.Thread(
+        target=_load_whisper_bg, name="whisper-load", daemon=True)
+    whisper_thread.start()
+
     species_id: str
     if args.species:
         print(f"using --species override: {args.species}")
@@ -642,16 +671,20 @@ def main() -> int:
             str(args.tflite_model), class_names, temperature=temperature)
         print(f"({time.perf_counter() - t:.1f}s)")
 
-        # Warm the TFLite interpreter with one throwaway prediction. The
-        # FIRST invoke() pays for op-kernel setup and tensor allocation
-        # (~200-500ms on a laptop, more on the Uno Q). Doing it here on
-        # a fake all-grey frame means the user-facing identification
-        # below is steady-state speed.
+        # Warm the TFLite interpreter with one throwaway prediction.
         print("warming classifier...", end=" ", flush=True)
         t = time.perf_counter()
         dummy = np.full((480, 640, 3), 128, dtype=np.uint8)
         classifier.predict(dummy)
         print(f"({(time.perf_counter() - t) * 1000:.0f}ms)")
+
+        # Ready beat: prompt the user to point the camera before we capture.
+        speak(voice, "Point me at an animal, then press enter.")
+        try:
+            input("\n  [enter when ready to identify] ")
+        except (EOFError, KeyboardInterrupt):
+            print("\naborted before identification")
+            return 0
 
         print("identifying species from camera...", flush=True)
         species_id, conf, msg = identify_species(
@@ -664,16 +697,9 @@ def main() -> int:
             return 1
         print(f"identified: {species_id} ({conf*100:.1f}%)")
 
-    # --- Whisper -----------------------------------------------------------
-    print("loading whisper...", end=" ", flush=True)
-    t = time.perf_counter()
-    whisper_model = WhisperModel(str(args.whisper_model),
-                                 n_threads=args.whisper_threads)
-    print(f"({time.perf_counter() - t:.1f}s)")
-
-    # --- Build the pipeline — same call run_pipeline.py makes -------------
-    print(f"building pipeline (backend={args.backend}, model={args.model})...",
-          flush=True)
+    # --- Build pipeline on main thread (sqlite is thread-bound) -----------
+    print(f"building pipeline (backend={args.backend}, "
+          f"model={args.model})...", flush=True)
     t = time.perf_counter()
     kwargs = dict(
         db_path=args.db,
@@ -686,14 +712,22 @@ def main() -> int:
     pipeline = build_pipeline(**kwargs)
     print(f"  built in {time.perf_counter() - t:.1f}s")
 
-    # Warm-up: first .encode() / first vector query / llama prefix cache
-    # are all slower than steady state. Run one throwaway query so the
-    # first *real* utterance isn't misleadingly slow.
+    # --- Join whisper -----------------------------------------------------
+    print("waiting for whisper...", flush=True)
+    t = time.perf_counter()
+    whisper_thread.join()
+    if "whisper" in background_errors:
+        raise background_errors["whisper"]
+    whisper_model = background["whisper"]
+    print(f"  whisper loaded in {background['whisper_load_s']:.1f}s "
+          f"(foreground wait {time.perf_counter() - t:.1f}s)")
+
+    # --- Warm up ----------------------------------------------------------
     print("warming up...", end=" ", flush=True)
     t = time.perf_counter()
     pipeline.answer(species_id, "warmup query, ignore")
     print(f"({(time.perf_counter() - t) * 1000:.0f}ms)")
-    growth_check(pipeline, species_id, n=12)
+    # growth_check(pipeline, species_id, n=12)
 
     return voice_repl(pipeline, species_id, whisper_model, voice)
 

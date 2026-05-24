@@ -44,6 +44,11 @@ cd ~/llama.cpp/build/bin
 ```
 (made a symlink to model location; absolute location is /home/arduino/.cache/huggingface/hub/models--HuggingFaceTB--SmolLM2-360M-Instruct-GGUF/snapshots/593b5a2e04c8f3e4ee880263f93e0bd2901ad47f/smollm2-360m-instruct-q8_0.gguf)
 
+Run full pipeline with image classification (add --camera-index 1 if using a webcam): 
+``` 
+python full_roboranger_run.py --voice voices/en_US-lessac-low.onnx --whisper-model models/ggml-tiny.en-q5_1.bin
+```
+
 ### Future plans
 
 power increase + LLM local + slm for self-driving + check SME top floor for designing wheels
