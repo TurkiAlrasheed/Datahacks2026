@@ -20,9 +20,9 @@ every model. To re-identify after that, restart the loop — keeps the
 per-turn latency budget intact (no ~1s camera+TTA on every button press).
 
 The classifier is whatever model lives in --model-dir (default
-species_identification/outputs/deploy): model_int8.tflite plus
-model_manifest.json, which declares the input preprocessing, class order,
-temperature and identification threshold. See
+species_identification/outputs/deploy): a model_*.tflite plus
+model_manifest.json, which names the .tflite file and declares the input
+preprocessing, class order, temperature and identification threshold. See
 species_identification/vision/tflite_classifier.py.
 
 Usage:
@@ -42,7 +42,7 @@ Requirements:
     A piper voice .onnx (+ .onnx.json sibling).
     Ollama installed and running (when on ollama backend).
     A whisper.cpp ggml model (ggml-tiny.en-q5_1.bin recommended).
-    A model dir with model_int8.tflite + model_manifest.json.
+    A model dir with model_*.tflite + model_manifest.json.
     A schema v2 corpus.db (species-partitioned vectors).
 
 Press-to-talk prototype: this uses <enter> as the button (press to start
@@ -586,16 +586,20 @@ def main() -> int:
     p.add_argument("--species", default=None,
                    help="override species_id; if omitted, identify from camera")
     # Audio args.
-    p.add_argument("--voice", type=Path, required=True,
-                   help="path to piper voice .onnx (+ .onnx.json sibling)")
-    p.add_argument("--whisper-model", type=Path, required=True,
+    # Required unless --camera-test (checked after parsing, so the camera
+    # check can run without any model files).
+    p.add_argument("--voice", type=Path, default=None,
+                   help="path to piper voice .onnx (+ .onnx.json sibling); "
+                        "required unless --camera-test")
+    p.add_argument("--whisper-model", type=Path, default=None,
                    help="path to whisper.cpp ggml model "
-                        "(ggml-tiny.en-q5_1.bin recommended)")
+                        "(ggml-tiny.en-q5_1.bin recommended); "
+                        "required unless --camera-test")
     p.add_argument("--whisper-threads", type=int, default=4,
                    help="threads for whisper.cpp (default: 4)")
     # Vision args.
     p.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL_DIR,
-                   help="directory with model_int8.tflite + "
+                   help="directory with model_*.tflite + "
                         "model_manifest.json (default: outputs/deploy)")
     p.add_argument("--camera-index", type=int, default=0,
                    help="V4L2 camera index (default: 0)")
@@ -657,6 +661,12 @@ def main() -> int:
             cap.release()
 
     # Fail fast on missing files before loading anything heavy.
+    missing = [flag for flag, value in (("--voice", args.voice),
+                                        ("--whisper-model", args.whisper_model))
+               if value is None]
+    if missing:
+        p.error(f"the following arguments are required: {', '.join(missing)} "
+                f"(only --camera-test runs without them)")
     if not args.voice.exists():
         print(f"error: voice file {args.voice} not found", file=sys.stderr)
         return 1

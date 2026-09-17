@@ -414,7 +414,7 @@ def print_report(r: dict, target: float) -> None:
         k = r["keras"]
         print(f"  float Keras single-view top-1 (test): "
               f"{_fmt(k['float_single_top1_test'])}; tflite agrees with float "
-              f"on {_fmt(k['int8_vs_float_top1_agreement_test'])}")
+              f"on {_fmt(k['tflite_vs_float_top1_agreement_test'])}")
     if "ref_parity" in r:
         p = r["ref_parity"]
         print(f"  reference-kernel parity on {p['images']} images: top-1 "
@@ -462,7 +462,7 @@ def main() -> int:
     results = [evaluate(d, args) for d in args.model_dir]
 
     if len(results) > 1:
-        print("\n=== comparison (test split, int8 + TTA, refit T, chosen "
+        print("\n=== comparison (test split, tflite + TTA, refit T, chosen "
               "threshold) ===")
         print(f"  {'model':28s} {'top1':>7s} {'top5':>7s} {'ECE':>7s} "
               f"{'prec':>7s} {'cover':>7s} {'negFA':>7s} {'thr':>5s} "

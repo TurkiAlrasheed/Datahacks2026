@@ -20,7 +20,7 @@ model in `model_manifest.json` and this class refuses to run without it.
 
 Manifest (model_manifest.json, next to the .tflite)
 ---------------------------------------------------
-    model_file        "model_int8.tflite" (relative to the manifest)
+    model_file        e.g. "model_dynamic.tflite" (relative to the manifest)
     arch              e.g. "mobilenetv3l"
     input_range       "raw_0_255" | "minus1_1" | "imagenet"
     img_size          320

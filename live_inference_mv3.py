@@ -20,7 +20,7 @@ Setup:
 
 Files to transfer to the Uno Q:
     species_identification/vision/tflite_classifier.py
-    <model dir>/model_int8.tflite + model_manifest.json
+    <model dir>/model_*.tflite + model_manifest.json
     live_inference_mv3.py (this file)
 
 Run:
@@ -91,7 +91,7 @@ def main(default_model_dir: Path = DEFAULT_MODEL_DIR) -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model-dir", type=Path, default=default_model_dir,
-                    help="directory with model_int8.tflite + "
+                    help="directory with model_*.tflite + "
                          "model_manifest.json")
     ap.add_argument("--camera-index", type=int, default=CAMERA_INDEX)
     ap.add_argument("--hz", type=float, default=INFER_HZ)

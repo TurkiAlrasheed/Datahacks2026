@@ -259,7 +259,8 @@ def main() -> int:
                     help="trained .keras checkpoint")
     ap.add_argument("--arch", required=True, choices=sorted(ARCH_INPUT_RANGE))
     ap.add_argument("--out", type=Path, required=True,
-                    help="output directory for model_int8.tflite + manifest")
+                    help="output directory for model_<quant>.tflite + "
+                         "manifest")
     ap.add_argument("--class-names", type=Path, default=None,
                     help="class_names.json written by the training run "
                          "(default: next to --keras)")
