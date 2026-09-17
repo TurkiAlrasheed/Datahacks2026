@@ -34,7 +34,7 @@ The final system runs entirely on the UNO Q. A visitor points the device at an a
 
 ```
 Camera (one frame at startup)
-    └─→ MobileNetV3 INT8 TFLite  ─→  species_id
+    └─→ MobileNetV3-L TFLite     ─→  species_id
                                            │
 Microphone (push-to-talk per question)     │
     └─→ Whisper.cpp (ggml-tiny.en)         │
@@ -65,19 +65,21 @@ The network agent worked, but connectivity is unreliable at a park. The demo als
 
 ### Vision: MobileNetV3 over DINOv2
 
-DINOv2 ViT-B/14 was the right backbone for training accuracy but too large to run at any useful rate on the UNO Q. MobileNetV3 (particularly the Small variant) runs well above real-time with TTA — 4 views per frame at 2 Hz. The accuracy gap was closed with two training techniques:
+DINOv2 ViT-B/14 was the right backbone for training accuracy but too large to run at any useful rate on the UNO Q. MobileNetV3-Large at 320×320 is small enough for one-shot identification with TTA (4 views). The accuracy gap was closed with two training techniques:
 
 - **Two-phase training**: freeze the backbone and train only the classification head first, then unfreeze the top blocks and fine-tune at a lower rate. With ~20 images per class, training the head before unfreezing prevents the backbone from being destroyed before the head stabilizes.
-- **Temperature scaling**: after training, a scalar `T` is fitted on the validation set so that the model's softmax outputs are calibrated probabilities rather than raw overconfident scores. This matters for the 0.55 confidence gate at session start.
+- **Temperature scaling**: a scalar `T` is fitted so the softmax outputs are calibrated probabilities rather than raw overconfident scores. It is fit on the *exported* model's TTA-averaged validation output — the same distribution the identification threshold is applied to on the device.
 
-**Test-Time Augmentation** (4 views per frame: original, horizontal flip, 90% crop, 80% crop) meaningfully improves top-1 accuracy at no extra model cost — just 4× the interpreter invocations per classification.
+**Test-Time Augmentation** (4 views per frame: original, horizontal flip, 90% crop, 80% crop) improves top-1 accuracy at no extra model cost — just 4× the interpreter invocations per classification.
+
+**Quantization matters more than preprocessing.** Full-integer post-training quantization collapses MobileNetV3-Large: on the device path its top-1 fell to ~17–23% while the float model scores ~79%, because its hard-swish / squeeze-excite activations don't survive int8 calibration. The shipped model uses dynamic-range quantization (int8 weights, float activations): 79.5% top-1 with TTA on the held-out test split, agreeing with the float model on 94% of images, at about the same file size (3.4 MB). Its identification threshold (0.63) is fit for ≥ 90% precision, and on test it announced a species for 0% of seashore frames. Every exported model carries a `model_manifest.json` declaring its input preprocessing, class order, temperature and threshold, and the runtime refuses a model whose tensors disagree with it.
 
 ### Knowledge: offline RAG instead of bigger weights
 
 Fitting La Jolla Cove species knowledge into a 360M-parameter model's weights would require fine-tuning and would still produce hallucinations on edge cases. Instead, a `corpus.db` SQLite database is built on the laptop and shipped to the device. It holds:
 
 - **Structured blurbs** — typed JSON records per species (appearance, diet, habitat, behavior, danger to humans/pets, notable facts), generated from Wikipedia source text by a local Ollama model. Danger fields are enums (`"no"` / `"mild"` / `"yes"`), not free text, because small models are far more reliable on labeled values than on interpreting hedged prose.
-- **Wikipedia text chunks** — full paragraphs embedded with `bge-small-en-v1.5` and stored as vectors in a `sqlite-vec` virtual table for approximate nearest-neighbor search.
+- **Wikipedia text chunks** — full paragraphs embedded with `bge-small-en-v1.5` and stored in a `sqlite-vec` table **partitioned by species**. The device always knows the species before it searches, so retrieval is an exact nearest-neighbor search over just that species' chunks. The earlier global index took the 50 nearest chunks across *all* species and filtered afterwards: 20% of questions lost a better snippet even with the species name added to the query, and 52% of questions phrased without the name got no snippets at all. The partitioned search misses none and is ~11× faster.
 
 For the majority of visitor questions ("what does it eat?", "is it dangerous?"), the answer comes entirely from the structured blurb — no retrieval, no LLM. Only complex or open-ended questions go to SmolLM2.
 
@@ -107,7 +109,7 @@ The UNO Q is slow to load models. Three strategies hide this from the visitor:
 
 - **Piper loads first**, before anything else, so the device can speak error messages during the rest of startup rather than going silent.
 - **Whisper loads in a background thread** while the camera is capturing and classifying. By the time identification finishes, Whisper is ready.
-- **llama.cpp `--cache-prompt`** caches the system prompt and species blurb prefix across turns. Only the user's question is re-encoded per turn, not the full context.
+- **Real warmup + llama.cpp `--cache-prompt`**: after identification, the pipeline runs one retrieval and one LLM generation for the identified species, so the first visitor question doesn't pay model-load or cold-cache costs. `--cache-prompt` then reuses the shared prompt prefix (system prompt + species header) across turns; the blurb field order depends on the question's intent, so the rest of the prompt is re-encoded when the intent changes.
 
 ---
 
@@ -115,8 +117,8 @@ The UNO Q is slow to load models. Three strategies hide this from the visitor:
 
 | Component | Technology |
 |---|---|
-| Vision classifier | MobileNetV3-Small (TF/Keras), INT8 TFLite via onnx2tf |
-| Species knowledge | SQLite + sqlite-vec, bge-small-en-v1.5 embeddings |
+| Vision classifier | MobileNetV3-Large 320px (TF/Keras), dynamic-range quantized TFLite via the Keras converter, run with LiteRT |
+| Species knowledge | SQLite + sqlite-vec (species partition key), bge-small-en-v1.5 embeddings |
 | LLM | SmolLM2-360M-Instruct (q8_0 GGUF), served via llama.cpp |
 | STT | whisper.cpp (ggml-tiny.en-q5_1.bin) via pywhispercpp |
 | TTS | Piper TTS (en_US-lessac-low.onnx) |

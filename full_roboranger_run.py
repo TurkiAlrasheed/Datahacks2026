@@ -7,15 +7,23 @@ that stays a pure (species_id, query) -> Response function with no I/O, so
 it stays testable and run_pipeline.py keeps working unchanged. All the
 microphone / speaker / camera / model-loading I/O lives here, at the edges:
 
-    camera frame   ->  MobileNetV2 (TTA)  ->  species_id   (CV in, once)
-    button down/up ->  record audio       ->  STT in
+    camera frame   ->  TFLite classifier (TTA) -> species_id (CV in, once)
+    button down/up ->  record audio            -> STT in
     whisper        ->  query string
     pipeline.answer->  Response                              (UNCHANGED core)
     resp.text      ->  piper                                 (TTS out)
 
 Species is identified ONCE at startup. Point the robot, classify, then
-take questions. To re-identify, restart the loop — keeps the per-turn
-latency budget intact (no ~1s camera+TTA on every button press).
+take questions. A failed identification (low confidence, seashore, camera
+hiccup) asks you to try again instead of exiting, so a retry doesn't reload
+every model. To re-identify after that, restart the loop — keeps the
+per-turn latency budget intact (no ~1s camera+TTA on every button press).
+
+The classifier is whatever model lives in --model-dir (default
+species_identification/outputs/deploy): model_int8.tflite plus
+model_manifest.json, which declares the input preprocessing, class order,
+temperature and identification threshold. See
+species_identification/vision/tflite_classifier.py.
 
 Usage:
     # Identify from camera, then chat:
@@ -34,7 +42,8 @@ Requirements:
     A piper voice .onnx (+ .onnx.json sibling).
     Ollama installed and running (when on ollama backend).
     A whisper.cpp ggml model (ggml-tiny.en-q5_1.bin recommended).
-    A trained model_*.tflite + class_names.json + (optional) temperature.json.
+    A model dir with model_int8.tflite + model_manifest.json.
+    A schema v2 corpus.db (species-partitioned vectors).
 
 Press-to-talk prototype: this uses <enter> as the button (press to start
 recording, press again to stop). On the device, swap record_utterance()
@@ -45,15 +54,18 @@ needs to change for the hardware port.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
+import platform
 import queue
 import subprocess
 import sys
 import tempfile
 import time
 import wave
+from datetime import datetime, timezone
 from pathlib import Path
-from species_identification.tests.mem_check import print_total_rss, growth_check
 
 import numpy as np
 
@@ -84,16 +96,20 @@ except ImportError:
           file=sys.stderr)
     raise
 
-sys.path.insert(1, "species_identification/pipeline")
-sys.path.insert(2, "species_identification/llm-tuning")
-sys.path.insert(3, "species_identification/tests")
-from pipeline_factory import build_pipeline
-from pipeline import RoboRangerPipeline, Response
-
-# The classifier lives in live_inference.py. We import the class only —
-# the if __name__ == "__main__" guard there keeps the standalone loop
-# from running on import.
-from live_inference_mv3 import TFLiteClassifierTTA
+# Resolve project modules from this file's location, not the caller's CWD.
+_ROOT = Path(__file__).resolve().parent
+for _sub in ("species_identification/vision", "species_identification/tests",
+             "species_identification/llm-tuning",
+             "species_identification/pipeline", "species_identification"):
+    sys.path.insert(1, str(_ROOT / _sub))
+from corpus_schema import (CorpusSchemaError, check_corpus_schema,  # noqa: E402
+                           read_meta)
+from mem_check import print_total_rss, growth_check  # noqa: E402
+from pipeline import RoboRangerPipeline, Response  # noqa: E402
+from pipeline_factory import build_pipeline  # noqa: E402
+from test_corpus import open_db  # noqa: E402
+from tflite_classifier import (ModelContractError,  # noqa: E402
+                               TFLiteClassifierTTA)
 
 
 # ---------------------------------------------------------------------------
@@ -114,21 +130,23 @@ MIN_UTTERANCE_SEC = 0.3
 # Vision constants
 # ---------------------------------------------------------------------------
 
-# Below this confidence we refuse to identify and abort the session
-# rather than running the pipeline on a guess. Sits roughly where the
-# classifier's calibrated probabilities stop being meaningful — adjust
-# after looking at predictions_tta.csv from a real walk.
-ID_CONF_THRESHOLD = 0.55
+# The identification threshold, temperature and negative classes (e.g.
+# "seashore" -> "no animal") come from the model's manifest: the threshold
+# is fit by tests/eval_tflite.py on the int8 model's TTA-averaged
+# probabilities, which is the distribution it is applied to here.
+DEFAULT_MODEL_DIR = _ROOT / "species_identification" / "outputs" / "deploy"
 
 # Number of throwaway frames before the "real" capture. Cheap cameras
 # (and V4L2 on Linux) buffer 1-2 stale frames; reading them flushes the
 # pipe so we classify what's actually in front of the robot.
 CAMERA_WARMUP_FRAMES = 5
 
-# "seashore" is the special non-species class baked into class_names.json.
-# If the top prediction is seashore, we should treat it as "no animal" and
-# refuse, even if confidence is high.
-NON_SPECIES_LABELS = {"seashore"}
+REFUSAL_MESSAGES = {
+    "negative_class": ("I do not see any animals right now. "
+                       "Point me at something and try again."),
+    "low_confidence": ("I am not sure what I see. Try moving closer or "
+                       "pointing me more directly at the animal."),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +188,7 @@ def _annotate_id_frame(frame: np.ndarray,
 
 def identify_species(classifier: TFLiteClassifierTTA,
                      camera_index: int,
-                     conf_threshold: float,
+                     conf_threshold: float | None = None,
                      save_dir: Path | None = None,
                      ) -> tuple[str | None, float, str]:
     """
@@ -235,11 +253,12 @@ def identify_species(classifier: TFLiteClassifierTTA,
             cv2.imwrite(str(raw_path), frame)
             print(f"  saved raw frame: {raw_path}")
 
-        # TTA-averaged predictions, already temperature-scaled.
+        # TTA-averaged, temperature-scaled predictions with the manifest's
+        # acceptance policy (negative classes, id_threshold) applied.
         t0 = time.perf_counter()
-        preds = classifier.predict(frame)
+        ident = classifier.identify(frame, threshold=conf_threshold)
         t_infer = time.perf_counter() - t0
-        top_label, top_conf = preds[0]
+        preds = ident.top
 
         # Per-stage timing — tells you exactly where the time went on
         # the FIRST identification (where TFLite warmup also lands if
@@ -262,20 +281,14 @@ def identify_species(classifier: TFLiteClassifierTTA,
             cv2.imwrite(str(ann_path), annotated)
             print(f"  saved annotated frame: {ann_path}")
 
-        if top_label in NON_SPECIES_LABELS:
-            return None, top_conf, ("I do not see any animals right now. "
-                                    "Point me at something and try again.")
-
-        if top_conf < conf_threshold:
-            return None, top_conf, ("I am not sure what I see. "
-                                    "Try moving closer or pointing me "
-                                    "more directly at the animal.")
+        if not ident.accepted:
+            return None, ident.confidence, REFUSAL_MESSAGES[ident.reason]
 
         # Replace underscores so the spoken confirmation reads naturally.
         # The species_id passed to the pipeline keeps the underscored form.
-        spoken = top_label.replace("_", " ")
+        spoken = ident.label.replace("_", " ")
         msg = f"I see a {spoken}. Press the button to ask me questions."
-        return top_label, top_conf, msg
+        return ident.label, ident.confidence, msg
 
     finally:
         cap.release()
@@ -477,6 +490,74 @@ def voice_repl(pipeline: RoboRangerPipeline, species_id: str,
 
 
 # ---------------------------------------------------------------------------
+# Startup checks + device status
+# ---------------------------------------------------------------------------
+
+def corpus_preflight(db_path: Path) -> tuple[dict, set[str]]:
+    """
+    Check corpus.db before any camera/voice work: it must exist, be schema
+    v2 (species-partitioned vectors), and match the runtime embedder.
+    Returns (corpus_meta, species_ids). Raises CorpusSchemaError or
+    FileNotFoundError with an actionable message.
+    """
+    if not db_path.is_file():
+        # sqlite3.connect() would silently create an empty file here.
+        raise FileNotFoundError(f"corpus not found: {db_path}")
+    conn = open_db(db_path)
+    try:
+        meta = check_corpus_schema(conn)
+        species = {r[0] for r in conn.execute(
+            "SELECT species_id FROM species WHERE blurb_json IS NOT NULL")}
+    finally:
+        conn.close()
+    return meta, species
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def write_device_status(path: Path, *, db_path: Path, corpus_meta: dict,
+                        classifier: TFLiteClassifierTTA | None,
+                        species_id: str, warmup: dict) -> None:
+    """
+    Record exactly which corpus and model this unit is running — the thing a
+    device would report upstream for OTA bookkeeping (see "OTA corpus
+    updates" in onDeviceAgentREADME.md).
+    """
+    model = None
+    if classifier is not None:
+        m = classifier.manifest
+        model = {
+            "dir": str(m.path.parent) if m.path else None,
+            "arch": m.arch,
+            "tflite_sha256": _sha256(m.model_path),
+            "input_range": m.input_range,
+            "temperature": m.temperature,
+            "id_threshold": m.id_threshold,
+            "evaluated_at": m.eval.get("evaluated_at"),
+        }
+    status = {
+        "written_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "host": platform.node(),
+        "corpus": {
+            "path": str(db_path),
+            **{k: corpus_meta.get(k) for k in (
+                "schema_version", "corpus_version", "content_sha256",
+                "species_count", "chunk_count", "sqlite_vec_version",
+                "embed_model", "built_at")},
+        },
+        "model": model,
+        "session": {"species_id": species_id, "warmup": warmup},
+    }
+    path.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -488,7 +569,7 @@ def main() -> int:
     # Pipeline args — kept identical to run_pipeline.py so muscle memory
     # transfers and the two scripts can share command lines.
     p.add_argument("--db",
-                   default="species_identification/offline-info/corpus.db",
+                   default=str(_ROOT / "species_identification/offline-info/corpus.db"),
                    help="path to corpus.db")
     p.add_argument("--backend", choices=("ollama", "llama-cpp"),
                    default="ollama",
@@ -512,21 +593,18 @@ def main() -> int:
                         "(ggml-tiny.en-q5_1.bin recommended)")
     p.add_argument("--whisper-threads", type=int, default=4,
                    help="threads for whisper.cpp (default: 4)")
-    # Vision args — new.
-    p.add_argument("--tflite-model", type=Path,
-                   default=Path("species_identification/outputs/model_int8.tflite"),
-                   help="path to int8 TFLite classifier")
-    p.add_argument("--class-names", type=Path,
-                   default=Path("species_identification/outputs/class_names.json"),
-                   help="path to class_names.json")
-    p.add_argument("--temperature-file", type=Path,
-                   default=Path("species_identification/outputs/temperature.json"),
-                   help="path to temperature.json (optional, T=1.0 if missing)")
+    # Vision args.
+    p.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL_DIR,
+                   help="directory with model_int8.tflite + "
+                        "model_manifest.json (default: outputs/deploy)")
     p.add_argument("--camera-index", type=int, default=0,
                    help="V4L2 camera index (default: 0)")
-    p.add_argument("--id-threshold", type=float, default=ID_CONF_THRESHOLD,
-                   help=f"min confidence to accept ID "
-                        f"(default: {ID_CONF_THRESHOLD})")
+    p.add_argument("--id-threshold", type=float, default=None,
+                   help="override the manifest's min confidence to accept "
+                        "an identification")
+    p.add_argument("--status-file", type=Path,
+                   default=Path("device_status.json"),
+                   help="where to record the running corpus/model versions")
     # Debug / diagnostic flags.
     p.add_argument("--save-id-frames", type=Path, default=None,
                    help="if set, save raw + annotated capture frame here "
@@ -601,10 +679,25 @@ def main() -> int:
         return 1
     print(f"({time.perf_counter() - t:.1f}s)")
 
+    # --- Corpus preflight --------------------------------------------------
+    # Seconds-cheap, and a stale (v1) or missing corpus would otherwise only
+    # surface after the camera flow, when the pipeline is built.
+    db_path = Path(args.db)
+    try:
+        corpus_meta, corpus_species = corpus_preflight(db_path)
+    except (CorpusSchemaError, FileNotFoundError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        speak(voice, "My knowledge base is missing or out of date. "
+                     "Please check the setup.")
+        return 1
+    print(f"corpus {db_path}: version {corpus_meta.get('corpus_version')} "
+          f"({corpus_meta.get('species_count')} species, "
+          f"sha {str(corpus_meta.get('content_sha256'))[:12]})")
+
     # --- Species ID stage --------------------------------------------------
     # Two paths: --species override (laptop dev, no camera) OR identify
-    # from a single camera frame. Failure here speaks an apology and
-    # exits — the loop won't start with an unknown species.
+    # from a single camera frame. A failed identification speaks why and
+    # waits for another try — the loop won't start with an unknown species.
     #
     # Performance note: while the user is pointing the camera and we're
     # running the classifier (~1-2s), the pipeline + whisper builds run on
@@ -634,42 +727,40 @@ def main() -> int:
     whisper_thread.start()
 
     species_id: str
+    classifier: TFLiteClassifierTTA | None = None
     if args.species:
         print(f"using --species override: {args.species}")
         species_id = args.species
-    else:
-        if not args.tflite_model.exists():
-            print(f"error: classifier model {args.tflite_model} not found",
+        if species_id not in corpus_species:
+            print(f"warn: {species_id} has no blurb in {db_path}; every "
+                  f"question will get the 'no information' reply",
                   file=sys.stderr)
+    else:
+        # The manifest carries the preprocessing contract, class order,
+        # temperature and threshold; a missing or mismatched one is fatal
+        # rather than silently mis-preprocessing every frame.
+        print("loading classifier...", end=" ", flush=True)
+        t = time.perf_counter()
+        try:
+            classifier = TFLiteClassifierTTA.from_dir(args.model_dir)
+        except ModelContractError as e:
+            print()
+            print(f"error: {e}", file=sys.stderr)
             speak(voice, "I cannot find my vision model. Please check "
                          "the setup.")
             return 1
-        if not args.class_names.exists():
-            print(f"error: class names {args.class_names} not found",
-                  file=sys.stderr)
-            return 1
-
-        # Load classifier + class names. Temperature is optional.
-        import json
-        with open(args.class_names) as f:
-            class_names = json.load(f)
-
-        temperature = 1.0
-        if args.temperature_file.exists():
-            try:
-                with open(args.temperature_file) as f:
-                    temperature = float(
-                        json.load(f).get("temperature", 1.0))
-                print(f"loaded temperature T={temperature:.3f}")
-            except Exception as e:
-                print(f"warn: could not read {args.temperature_file} "
-                      f"({e}), using T=1.0")
-
-        print("loading classifier...", end=" ", flush=True)
-        t = time.perf_counter()
-        classifier = TFLiteClassifierTTA(
-            str(args.tflite_model), class_names, temperature=temperature)
         print(f"({time.perf_counter() - t:.1f}s)")
+        print(f"  {classifier.describe()}")
+
+        # Every species the classifier can announce needs a blurb, or the
+        # visitor gets "I don't have information about this species".
+        uncovered = sorted(
+            c for c in classifier.class_names
+            if c not in classifier.negative_classes
+            and c not in corpus_species)
+        if uncovered:
+            print(f"warn: {len(uncovered)} classifier classes have no blurb "
+                  f"in {db_path}: {uncovered}", file=sys.stderr)
 
         # Warm the TFLite interpreter with one throwaway prediction.
         print("warming classifier...", end=" ", flush=True)
@@ -679,22 +770,27 @@ def main() -> int:
         print(f"({(time.perf_counter() - t) * 1000:.0f}ms)")
 
         # Ready beat: prompt the user to point the camera before we capture.
+        # A failed identification speaks why and loops back here instead of
+        # exiting, so a retry doesn't cost a full model reload on stage.
         speak(voice, "Point me at an animal, then press enter.")
-        try:
-            input("\n  [enter when ready to identify] ")
-        except (EOFError, KeyboardInterrupt):
-            print("\naborted before identification")
-            return 0
+        prompt = "\n  [enter when ready to identify] "
+        while True:
+            try:
+                input(prompt)
+            except (EOFError, KeyboardInterrupt):
+                print("\naborted before identification")
+                return 0
 
-        print("identifying species from camera...", flush=True)
-        species_id, conf, msg = identify_species(
-            classifier, args.camera_index, args.id_threshold,
-            save_dir=args.save_id_frames)
-        speak(voice, msg)
-        if species_id is None:
+            print("identifying species from camera...", flush=True)
+            species_id, conf, msg = identify_species(
+                classifier, args.camera_index, args.id_threshold,
+                save_dir=args.save_id_frames)
+            speak(voice, msg)
+            if species_id is not None:
+                break
             print(f"identification failed (top conf {conf*100:.1f}%): "
                   f"{msg}", file=sys.stderr)
-            return 1
+            prompt = "\n  [enter to try again, Ctrl-C to quit] "
         print(f"identified: {species_id} ({conf*100:.1f}%)")
 
     # --- Build pipeline on main thread (sqlite is thread-bound) -----------
@@ -723,11 +819,26 @@ def main() -> int:
           f"(foreground wait {time.perf_counter() - t:.1f}s)")
 
     # --- Warm up ----------------------------------------------------------
+    # Real retrieval + one LLM generation on this species' prompt, so the
+    # first visitor question doesn't pay cold embedder / llama.cpp costs.
     print("warming up...", end=" ", flush=True)
     t = time.perf_counter()
-    pipeline.answer(species_id, "warmup query, ignore")
-    print(f"({(time.perf_counter() - t) * 1000:.0f}ms)")
+    warm = pipeline.warmup(species_id)
+    print(f"({(time.perf_counter() - t) * 1000:.0f}ms: "
+          + ", ".join(f"{k}={v * 1000:.0f}ms" for k, v in warm.items()
+                      if isinstance(v, float)) + ")")
+    if "error" in warm:
+        print(f"warn: warmup: {warm['error']}", file=sys.stderr)
     # growth_check(pipeline, species_id, n=12)
+
+    try:
+        write_device_status(args.status_file, db_path=db_path,
+                            corpus_meta=corpus_meta, classifier=classifier,
+                            species_id=species_id, warmup=warm)
+        print(f"status written to {args.status_file}")
+    except OSError as e:
+        print(f"warn: could not write {args.status_file}: {e}",
+              file=sys.stderr)
 
     return voice_repl(pipeline, species_id, whisper_model, voice)
 

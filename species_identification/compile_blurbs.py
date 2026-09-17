@@ -8,6 +8,9 @@ Run order (this matters):
     3. (review blurbs.yaml by hand, set reviewed: true)
     4. python compile_blurbs.py blurbs.yaml corpus.db    # this script
 
+corpus.db must be schema v2 (see corpus_schema.py); a v1 file is refused
+with a pointer to migrate_corpus_v2.py.
+
 This script does three things to the existing corpus.db:
 
   1. Adds two columns to the `species` table (idempotently): `blurb_text`
@@ -17,10 +20,10 @@ This script does three things to the existing corpus.db:
 
   2. Inserts one new row per species into `chunks` with `category = 'blurb'`,
      containing the rendered blurb. This row is also embedded and inserted
-     into `chunk_vectors` so the RAG retriever can find it via cosine
-     similarity along with the Wikipedia chunks. The runtime should also
-     pin this row by species_id so it's guaranteed in context regardless
-     of similarity score.
+     into `chunk_vectors` (category 'blurb'). The runtime always injects the
+     blurb into the prompt as SPECIES FACTS, so retrieval excludes this
+     category; the row is kept so the corpus content (and its manifest
+     hash) fully describes what the device ships.
 
   3. Refuses to do anything if any blurb has reviewed: false, or if any
      blurb references a species_id missing from the corpus and the blurb
@@ -35,7 +38,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import struct
 import sys
 from pathlib import Path
 
@@ -44,11 +46,18 @@ import yaml
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
-
-# Must match build_corpus.py. If you change the embedding model there,
-# change it here too — mismatched embeddings ruin retrieval silently.
-EMBED_MODEL = "BAAI/bge-small-en-v1.5"
-EMBED_DIM = 384
+# EMBED_MODEL comes from the shared schema module so the builder, this
+# compiler, and the runtime retriever can't disagree on the embedder.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from corpus_schema import (  # noqa: E402
+    BLURB_CATEGORY,
+    EMBED_MODEL,
+    CorpusSchemaError,
+    check_corpus_schema,
+    insert_vector,
+    pack_embedding,
+    refresh_manifest,
+)
 
 # Order in which fields appear in the rendered blurb text. Stable order
 # matters: it's both what the LLM sees as RAG context and (potentially)
@@ -119,6 +128,11 @@ def open_corpus(db_path: Path) -> sqlite3.Connection:
     conn.enable_load_extension(True)
     sqlite_vec.load(conn)
     conn.enable_load_extension(False)
+    try:
+        check_corpus_schema(conn)
+    except CorpusSchemaError as e:
+        conn.close()
+        sys.exit(f"[FATAL] {db_path}: {e}")
     return conn
 
 
@@ -169,8 +183,8 @@ def delete_existing_blurb_chunks(conn: sqlite3.Connection,
     re-running the compile step replaces rather than duplicates.
     """
     rows = conn.execute(
-        "SELECT id FROM chunks WHERE species_id = ? AND category = 'blurb'",
-        (species_id,),
+        "SELECT id FROM chunks WHERE species_id = ? AND category = ?",
+        (species_id, BLURB_CATEGORY),
     ).fetchall()
     for (rowid,) in rows:
         conn.execute("DELETE FROM chunk_vectors WHERE rowid = ?", (rowid,))
@@ -181,15 +195,11 @@ def insert_blurb_chunk(conn: sqlite3.Connection, species_id: str,
                        text: str, embedding) -> None:
     """Insert the blurb as a chunk + matching vector row."""
     cur = conn.execute(
-        "INSERT INTO chunks(species_id, category, text) VALUES (?, 'blurb', ?)",
-        (species_id, text),
+        "INSERT INTO chunks(species_id, category, text) VALUES (?, ?, ?)",
+        (species_id, BLURB_CATEGORY, text),
     )
-    rowid = cur.lastrowid
-    emb_bytes = struct.pack(f"{EMBED_DIM}f", *embedding.tolist())
-    conn.execute(
-        "INSERT INTO chunk_vectors(rowid, embedding) VALUES (?, ?)",
-        (rowid, emb_bytes),
-    )
+    insert_vector(conn, cur.lastrowid, species_id, BLURB_CATEGORY,
+                  pack_embedding(embedding))
 
 
 def update_species_blurb_payload(conn: sqlite3.Connection, species_id: str,
@@ -255,6 +265,7 @@ def main(blurbs_path: str, db_path: str) -> None:
         update_species_blurb_payload(conn, species_id, rendered, fields_json)
 
     conn.commit()
+    meta = refresh_manifest(conn)
 
     # Sanity check: how many species rows now have blurbs vs total?
     total_species = conn.execute(
@@ -273,6 +284,7 @@ def main(blurbs_path: str, db_path: str) -> None:
     print(f"  Species in corpus:      {total_species}")
     print(f"  Species with blurb:     {with_blurbs}")
     print(f"  Blurb chunks indexed:   {blurb_chunks}")
+    print(f"  Corpus version:         {meta['corpus_version']}")
     if with_blurbs < total_species:
         missing = total_species - with_blurbs
         print(f"\n  Note: {missing} species in the corpus have no blurb. "

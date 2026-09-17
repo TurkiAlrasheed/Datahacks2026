@@ -38,24 +38,24 @@ from a config" helper.
 
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal, Protocol
-import sys
 
-sys.path.insert(1, "../species_identification/llm-tuning")
-sys.path.insert(2, "../species_identification/tests")
-from blurb_store import BlurbStore
-from intent import Intent, IntentClassifier, IntentResult
-from prompt_builder import Blurb, Chunk, build_messages
-from wildlife_gate import GateResult, WildlifeGate
+# Resolve sibling packages from this file's location, not the caller's CWD.
+_SPECIES_DIR = Path(__file__).resolve().parents[1]
+for _sub in ("tests", "llm-tuning", "pipeline", "."):
+    _path = str((_SPECIES_DIR / _sub).resolve())
+    if _path not in sys.path:
+        sys.path.insert(1, _path)
 
-# `test_corpus` imports sentence_transformers at module level, which is a
-# heavy dep we don't actually need in this file. Import the two pure
-# functions we use lazily so importing pipeline.py is cheap.
-def _retrieve_fns():
-    from test_corpus import retrieve, l2_to_cosine
-    return retrieve, l2_to_cosine
+from blurb_store import BlurbStore  # noqa: E402
+from intent import Intent, IntentClassifier, IntentResult  # noqa: E402
+from prompt_builder import Blurb, Chunk, build_messages  # noqa: E402
+from test_corpus import l2_to_cosine, retrieve  # noqa: E402
+from wildlife_gate import GateResult, WildlifeGate  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +350,52 @@ class RoboRangerPipeline:
             latency=latency,
         )
 
+    def warmup(self, species_id: str) -> dict[str, float | str]:
+        """
+        Run the stages the first real question will hit, so the visitor
+        doesn't pay cold-start costs: gate + intent embedding, the species'
+        partition KNN, and one LLM generation on this species' prompt (which
+        also leaves llama.cpp holding the system prompt + SPECIES FACTS prefix
+        in its prompt cache).
+
+        A throwaway query through answer() doesn't do this: it is rejected at
+        the gate or intent stage and never reaches retrieval or the LLM.
+
+        Returns per-stage seconds. LLM failures are recorded under "error"
+        instead of raised, so a backend that isn't running is reported at
+        startup rather than crashing it.
+        """
+        timings: dict[str, float | str] = {}
+        blurb = self.blurb_store.get(species_id)
+        if blurb is None:
+            timings["error"] = f"species {species_id!r} not in corpus"
+            return timings
+        query = f"what does the {self._name(blurb)} look like"
+
+        t = time.perf_counter()
+        self.gate.check(query)
+        self.intent_classifier.classify(query)
+        timings["embed"] = time.perf_counter() - t
+
+        t = time.perf_counter()
+        chunks, _ = self._retrieve_filtered(species_id, query)
+        timings["retrieval"] = time.perf_counter() - t
+
+        messages = build_messages(
+            query=query,
+            blurb=blurb,
+            chunks=chunks,
+            intent_result=IntentResult(Intent.DESCRIPTION, "high", 1.0, 1.0,
+                                       {}),
+        )
+        t = time.perf_counter()
+        try:
+            self.llm.generate(messages)
+        except Exception as e:
+            timings["error"] = f"LLM backend: {type(e).__name__}: {e}"
+        timings["llm"] = time.perf_counter() - t
+        return timings
+
     # -- internal helpers ---------------------------------------------------
 
     def _retrieve_filtered(
@@ -362,7 +408,6 @@ class RoboRangerPipeline:
 
         Returns (kept_chunks, n_dropped).
         """
-        retrieve, l2_to_cosine = _retrieve_fns()
         raw = retrieve(
             self.db_conn, self.embedder, species_id, query, k=self.retrieval_k,
         )
@@ -441,11 +486,15 @@ class RoboRangerPipeline:
     # Capitalization in source fields is inconsistent (some sentence-cap,
     # most lowercase). _decap() lowercases the first character so phrases
     # paste cleanly into mid-sentence; values that appear at the start of
-    # a sentence get manually capitalized in the template.
+    # a sentence get manually capitalized in the template. It also drops
+    # trailing periods, since every template supplies its own punctuation
+    # (otherwise "Insects and small arthropods." renders as "arthropods..").
 
     @staticmethod
     def _decap(s: str) -> str:
-        """Lowercase first character so a field reads naturally mid-sentence."""
+        """Lowercase first character and drop trailing periods so a field
+        reads naturally mid-sentence."""
+        s = s.rstrip(" .") if s else s
         return s[:1].lower() + s[1:] if s else s
 
     @staticmethod
@@ -505,8 +554,12 @@ class RoboRangerPipeline:
     def _format_diet(self, blurb: Blurb) -> str | None:
         if blurb.prose_reviewed and blurb.diet_prose:
             return blurb.diet_prose
-        
-        diet = blurb.diet.strip()
+
+        # Missing fields fall through to retrieval + LLM rather than
+        # crashing (None.strip()) or rendering "eats ." to the visitor.
+        diet = (blurb.diet or "").strip()
+        if not diet:
+            return None
         name = self._name(blurb)
 
         if "photosynthesis" in diet.lower():
@@ -518,7 +571,9 @@ class RoboRangerPipeline:
         return f"The {name} eats {self._decap(diet)}."
 
     def _format_habitat(self, blurb: Blurb) -> str | None:
-        habitat = blurb.habitat.strip()
+        habitat = (blurb.habitat or "").strip()
+        if not habitat:
+            return None
         name = self._name(blurb)
         return f"You'll find the {name} in {self._decap(habitat)}."
 
@@ -526,7 +581,10 @@ class RoboRangerPipeline:
         if blurb.prose_reviewed and blurb.size_prose:
             return blurb.size_prose
         # Fallback while prose isn't reviewed yet.
-        return f"The {self._name(blurb)} typically measures {self._decap(blurb.size)}."
+        size = (blurb.size or "").strip()
+        if not size:
+            return None
+        return f"The {self._name(blurb)} typically measures {self._decap(size)}."
 
     def _format_behavior(self, blurb: Blurb) -> str | None:
         if blurb.prose_reviewed and blurb.behavior_prose:
@@ -556,11 +614,11 @@ class RoboRangerPipeline:
         notable = (blurb.notable or "").strip()
         if not appearance:
             return None
-        parts = [
-            f"The {self._name(blurb)} has {self._decap(appearance)}",
-            f"and typically measures {self._decap(size)}." if size
-                else f"{self._decap(appearance)}.",
-        ]
+        first = f"The {self._name(blurb)} has {self._decap(appearance)}"
+        if size:
+            parts = [f"{first} and typically measures {self._decap(size)}."]
+        else:
+            parts = [f"{first}."]
         if notable:
             parts.append(f"Notably, {self._decap(notable)}.")
         return " ".join(parts)

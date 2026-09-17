@@ -42,8 +42,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-sys.path.insert(1, "../species_identification/pipeline")
-sys.path.insert(2, "../species_identification/llm-tuning")
+sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "pipeline"))
+sys.path.insert(2, str(Path(__file__).resolve().parents[1] / "llm-tuning"))
 import yaml
 
 from pipeline import RoboRangerPipeline, Response

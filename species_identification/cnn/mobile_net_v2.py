@@ -37,6 +37,7 @@ Pipeline:
 import os
 os.environ["TF_USE_LEGACY_KERAS"] = "1"  # forces tf.keras to be the standalone Keras package, not tf's built-in
 
+import sys
 import json
 import pathlib
 import shutil
@@ -51,8 +52,15 @@ from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 # ---------------------------------------------------------------------------
 # Config — tune these
 # ---------------------------------------------------------------------------
-DATA_DIR        = "../ucsd-data"       # folder-per-class root
-OUTPUT_DIR      = "../outputs"         # where models + logs go
+# Paths are anchored to this file so the script works from any CWD. Each
+# architecture writes to its own output folder: the trainers used to share
+# outputs/ and silently overwrote each other's temperature.json,
+# class_names.json and test_results.json.
+ARCH            = "mobilenetv2_qat"
+_HERE           = pathlib.Path(__file__).resolve().parent
+DATA_DIR        = _HERE.parent / "ucsd-data"            # folder-per-class root
+SPLITS_DIR      = _HERE / "_splits"                     # rebuilt every run
+OUTPUT_DIR      = _HERE.parent / "outputs" / ARCH       # models + logs
 IMG_SIZE        = 320                  # MobileNetV2 standard input
 BATCH_SIZE      = 16                   
 SEED            = 42
@@ -359,9 +367,11 @@ def apply_mixup_cutmix(ds, num_classes, alpha=0.2, prob=0.5):
 
 # ---------------------------------------------------------------------------
 # 4. Model — MobileNetV2 with ImageNet weights + custom head.
-#    IMPORTANT: Keras' MobileNetV3 already includes a Rescaling layer
-#    internally, so we feed it raw [0, 255] pixel values. Do NOT normalize
-#    manually — doing so halves accuracy.
+#    IMPORTANT: unlike Keras' MobileNetV3, MobileNetV2 has NO rescaling layer
+#    in the graph. Inputs must already be scaled to [-1, 1] (x / 127.5 - 1),
+#    which train() does in the tf.data pipeline. The exported int8 model
+#    therefore declares input_range "minus1_1" in its manifest, and the
+#    on-device classifier applies the same scaling before quantizing.
 # ---------------------------------------------------------------------------
 def build_model(num_classes):
     # 1. Instantiate MobileNetV2
@@ -392,24 +402,13 @@ def build_model(num_classes):
 def smoke_test_build():
     """Quick check that everything wires up at the new resolution."""
  
-    # Just build the model, don't train.
-    aug = keras.Sequential([layers.RandomFlip("horizontal")], name="augment")
-    inputs = keras.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
-    x = aug(inputs)
-    backbone = keras.applications.MobileNetV3Large(
-        input_shape=(IMG_SIZE, IMG_SIZE, 3),
-        include_top=False,
-        weights="imagenet",
-        include_preprocessing=True,
-        pooling="avg",
-    )
-    x = backbone(x, training=False)
-    outputs = layers.Dense(51)(x)
-    model = keras.Model(inputs, outputs)
- 
-    # Pass a dummy batch through to verify shapes flow.
+    # Just build the model, don't train. Same architecture as build_model().
+    model, _ = build_model(51)
+
+    # Pass a dummy batch through to verify shapes flow. MobileNetV2 takes
+    # inputs already scaled to [-1, 1].
     dummy = tf.random.uniform([2, IMG_SIZE, IMG_SIZE, 3],
-                              minval=0, maxval=255)
+                              minval=-1.0, maxval=1.0)
     out = model(dummy, training=False)
     print(f"Input shape:  {dummy.shape}")
     print(f"Output shape: {out.shape}")
@@ -429,7 +428,7 @@ def smoke_test_build():
 # ---------------------------------------------------------------------------
 def smoke_test_data():
     """Peek at one training batch to confirm image shape and label shape."""
-    split_root, class_names = build_splits(DATA_DIR)
+    split_root, class_names = build_splits(DATA_DIR, SPLITS_DIR)
     train_ds, val_ds, test_ds = make_datasets(split_root, class_names)
     for imgs, labels in train_ds.take(1):
         print(f"Batch images shape: {imgs.shape}")  # expect (16, 320, 320, 3)
@@ -599,7 +598,7 @@ def fit_temperature(model, val_ds, grid=None):
 
 
 def train():
-    split_root, class_names = build_splits(DATA_DIR)
+    split_root, class_names = build_splits(DATA_DIR, SPLITS_DIR)
     num_classes = len(class_names)
     train_ds, val_ds, test_ds = make_datasets(split_root, class_names)
  
@@ -621,9 +620,10 @@ def train():
         x = tf.cast(x, tf.float32) / 127.5 - 1.0
         return x, y
 
-    # 2. Apply the compiled functions
+    # 2. Apply the compiled functions. The calibration and QAT phases need
+    # un-augmented images, so clean_train_ds only rescales.
     aug_train_ds = train_ds.map(process_train, num_parallel_calls=tf.data.AUTOTUNE)
-    clean_train_ds = aug_train_ds.prefetch(tf.data.AUTOTUNE)
+    clean_train_ds = train_ds.map(process_val_test, num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)
  
     train_ds = apply_mixup_cutmix(aug_train_ds, num_classes, alpha=0.2, prob=0.5)
     train_ds = train_ds.prefetch(tf.data.AUTOTUNE)
@@ -731,13 +731,13 @@ def train():
         json.dump(results, f, indent=2)
  
     model.save(os.path.join(OUTPUT_DIR, "final.keras"))
-    return model, test_ds, class_names
+    return model, test_ds, class_names, T
 
 
 # ---------------------------------------------------------------------------
 # 6. TFLite export — what you actually deploy to the Uno Q.
 # ---------------------------------------------------------------------------
-def export_tflite(model, test_ds):
+def export_tflite(model, class_names, temperature):
     print("\n=== Exporting TFLite Models ===")
     
     # 1. Float32 Export (Baseline)
@@ -747,33 +747,18 @@ def export_tflite(model, test_ds):
         f.write(tflite_fp32)
     print(f"[info] Saved: model_fp32.tflite ({len(tflite_fp32)/1e6:.2f} MB)")
 
-    # 2. INT8 Quantized Export
-    # The converter strictly requires a generator yielding representative data
-    # to calibrate the activation ranges for the input/output tensors.
-    def representative_dataset_gen():
-        # Take 10 batches from the pre-processed test dataset
-        for imgs, _labels in test_ds.take(10):
-            # The TFLite converter expects a list containing the input tensor(s)
-            # The images are already cast to float32 and scaled to [-1.0, 1.0]
-            yield [imgs]
-
-    converter_int8 = tf.lite.TFLiteConverter.from_keras_model(model)
-    converter_int8.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter_int8.representative_dataset = representative_dataset_gen
-    
-    # Enforce full integer quantization for edge compatibility
-    converter_int8.target_spec.supported_ops = [
-        tf.lite.OpsSet.TFLITE_BUILTINS_INT8,
-    ]
-    
-    # Use standard int8 (-128 to 127) to support MobileNetV2's [-1.0, 1.0] range
-    converter_int8.inference_input_type = tf.int8
-    converter_int8.inference_output_type = tf.int8
-    
-    tflite_int8 = converter_int8.convert()
-    with open(os.path.join(OUTPUT_DIR, "model_int8_qat.tflite"), "wb") as f:
-        f.write(tflite_int8)
-    print(f"[info] Saved: model_int8_qat.tflite ({len(tflite_int8)/1e6:.2f} MB)")
+    # 2. INT8 Quantized Export via the shared exporter: representative data
+    # from train+val (this used to take 10 batches of the TEST split), int8
+    # I/O, and a model_manifest.json declaring input_range "minus1_1" so the
+    # device scales pixels to [-1, 1] before quantizing.
+    sys.path.insert(0, str(_HERE.parent))
+    from export_tflite import export_model
+    export_model(model, arch=ARCH, class_names=class_names,
+                 splits=SPLITS_DIR, out_dir=OUTPUT_DIR,
+                 keras_path=pathlib.Path(OUTPUT_DIR) / "final.keras",
+                 temperature=temperature, io_dtype="int8")
+    print("Next: python species_identification/tests/eval_tflite.py "
+          f"--model-dir {OUTPUT_DIR} --write")
 
 
 if __name__ == "__main__":
@@ -792,5 +777,5 @@ if __name__ == "__main__":
     # print("Smoke tests passed. Training would start here.")
     # print("=" * 60)
 
-    model, test_ds, class_names = train()
-    export_tflite(model, test_ds)
+    model, test_ds, class_names, T = train()
+    export_tflite(model, class_names, T)
