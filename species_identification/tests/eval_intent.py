@@ -27,7 +27,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Sequence
 
-sys.path.insert(1, "../species_identification/llm-tuning")
+sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "llm-tuning"))
 from intent import Intent, IntentClassifier, PROTOTYPES
 from wildlife_gate import WildlifeGate
 

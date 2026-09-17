@@ -12,12 +12,19 @@ from pathlib import Path
 from typing import Literal
 import sys
 
-sys.path.insert(1, "../species_identification/llm-tuning")
-from blurb_store import BlurbStore
-from intent import IntentClassifier
-from pipeline import DEFAULT_RETRIEVAL_THRESHOLD, RoboRangerPipeline
-from test_corpus import EMBED_MODEL, open_db
-from wildlife_gate import WildlifeGate
+# Resolve sibling packages from this file's location, not the caller's CWD.
+_SPECIES_DIR = Path(__file__).resolve().parents[1]
+for _sub in ("tests", "llm-tuning", "pipeline", "."):
+    _path = str((_SPECIES_DIR / _sub).resolve())
+    if _path not in sys.path:
+        sys.path.insert(1, _path)
+
+from blurb_store import BlurbStore  # noqa: E402
+from corpus_schema import check_corpus_schema  # noqa: E402
+from intent import IntentClassifier  # noqa: E402
+from pipeline import DEFAULT_RETRIEVAL_THRESHOLD, RoboRangerPipeline  # noqa: E402
+from test_corpus import EMBED_MODEL, open_db  # noqa: E402
+from wildlife_gate import WildlifeGate  # noqa: E402
 
 
 # Reuse the LLM backends from eval_e2e.py — same interface.
@@ -54,12 +61,21 @@ def build_pipeline(
     Returns:
         A RoboRangerPipeline. The pipeline owns the DB connection but NOT
         the embedder (caller may want to reuse it).
+
+    Raises:
+        CorpusSchemaError: corpus.db is not schema v2 (partitioned vectors)
+            or was embedded with a different model. Checked before the
+            embedder loads so a stale corpus fails in milliseconds.
     """
+    db_path = Path(db_path)
+    if not db_path.is_file():
+        raise FileNotFoundError(f"corpus not found: {db_path}")
+    conn = open_db(db_path)
+    check_corpus_schema(conn)
+
     if embedder is None:
         from sentence_transformers import SentenceTransformer
         embedder = SentenceTransformer(embed_model)
-
-    conn = open_db(Path(db_path))
 
     # Build embedding-based components once and pass them in. They cache
     # centroids on construction; reusing them across queries is ~free, but

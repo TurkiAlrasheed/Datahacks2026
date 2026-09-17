@@ -30,11 +30,14 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(1, "species_identification/pipeline")
-sys.path.insert(2, "species_identification/llm-tuning")
-sys.path.insert(3, "species_identification/tests")
-from pipeline_factory import build_pipeline
-from pipeline import RoboRangerPipeline, Response
+_ROOT = Path(__file__).resolve().parent
+sys.path.insert(1, str(_ROOT / "species_identification/pipeline"))
+sys.path.insert(2, str(_ROOT / "species_identification/llm-tuning"))
+sys.path.insert(3, str(_ROOT / "species_identification/tests"))
+sys.path.insert(4, str(_ROOT / "species_identification"))
+from corpus_schema import CorpusSchemaError  # noqa: E402
+from pipeline_factory import build_pipeline  # noqa: E402
+from pipeline import RoboRangerPipeline, Response  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -87,17 +90,22 @@ def print_response(resp: Response, *, verbose: bool = False) -> None:
 
 def warmup(pipeline: RoboRangerPipeline, species_id: str) -> None:
     """
-    Send a throwaway query through the full pipeline so the first real
-    query isn't artificially slow. Warms:
+    Run pipeline.warmup() so the first real query isn't artificially slow.
+    Warms:
       - sentence-transformer (first .encode() is slower than steady state)
-      - sqlite-vec (first vector query)
-      - llama.cpp prefix cache (system + blurb prefix gets cached for
-        subsequent calls with the same species)
+      - sqlite-vec (first partition KNN for this species)
+      - llama.cpp prefix cache (system + species facts prefix)
+    A throwaway query through answer() used to do none of this: the gate or
+    intent stage rejected it before retrieval or the LLM ran.
     """
     print("warming up...", end=" ", flush=True)
     t = time.perf_counter()
-    pipeline.answer(species_id, "warmup query, ignore")
-    print(f"({(time.perf_counter() - t) * 1000:.0f}ms)")
+    timings = pipeline.warmup(species_id)
+    print(f"({(time.perf_counter() - t) * 1000:.0f}ms: "
+          + ", ".join(f"{k}={v * 1000:.0f}ms" for k, v in timings.items()
+                      if isinstance(v, float)) + ")")
+    if "error" in timings:
+        print(f"  warn: {timings['error']}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -191,8 +199,8 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--db", 
-                   default="species_identification/offline-info/corpus.db",
-                   help="path to corpus.db (default: corpus.db)")
+                   default=str(_ROOT / "species_identification/offline-info/corpus.db"),
+                   help="path to corpus.db (default: species_identification/offline-info/corpus.db)")
     p.add_argument("--backend", choices=("ollama", "llama-cpp"),
                    default="ollama",
                    help="LLM backend (default: ollama for laptop)")
@@ -234,7 +242,11 @@ def main() -> int:
     )
     if args.threshold is not None:
         kwargs["retrieval_threshold"] = args.threshold
-    pipeline = build_pipeline(**kwargs)
+    try:
+        pipeline = build_pipeline(**kwargs)
+    except (CorpusSchemaError, FileNotFoundError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     print(f"  built in {time.perf_counter() - t:.1f}s")
 
     if not args.no_warmup:

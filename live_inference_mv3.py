@@ -1,166 +1,65 @@
 """
 Headless live species identification with Test-Time Augmentation (TTA)
-and temperature scaling.
+and temperature scaling, for any manifest-described TFLite model.
 
-Same as live_inference.py but also:
-    - Runs inference on multiple augmented views of each frame and
-      averages the probabilities (TTA).
-    - Applies temperature scaling: divides logits by a learned scalar T
-      before softmax, correcting for under/over-confidence. T is saved by
-      the training script at outputs/temperature.json. If the file isn't
-      present, T=1.0 is used (no change).
+The classifier itself lives in species_identification/vision/tflite_classifier.py
+and is shared with full_roboranger_run.py. It reads model_manifest.json next to
+the .tflite to learn the model's input domain (raw 0..255 for MobileNetV3,
+[-1, 1] for MobileNetV2, ImageNet mean/std for ONNX exports), its class order,
+temperature and TTA views. There is no hard-coded preprocessing here any more:
+the old copy fed raw pixels to every model, which is only correct for the
+MobileNetV3 graphs.
 
-Views used: original, horizontal flip, center crop (90%), center crop (80%).
-Roughly 4x the inference cost per frame. Still well above real-time on the
-Uno Q with MobileNetV3-Small or -Large.
+Each loop tick grabs a frame, averages temperature-scaled softmax over the TTA
+views (original, horizontal flip, 90% and 80% center crops), logs top-3 to a
+CSV and optionally saves an annotated capture. Logs go to a per-model folder
+so runs of different models are never mixed in one CSV.
 
 Setup:
     pip install --break-system-packages ai-edge-litert numpy opencv-python
 
 Files to transfer to the Uno Q:
-    model_int8.tflite
-    class_names.json
-    temperature.json      (optional — falls back to T=1 if missing)
-    live_inference_tta_calibrated.py
+    species_identification/vision/tflite_classifier.py
+    <model dir>/model_*.tflite + model_manifest.json
+    live_inference_mv3.py (this file)
 
 Run:
-    python3 live_inference_tta_calibrated.py
+    python3 live_inference_mv3.py                                    # outputs/deploy
+    python3 live_inference_mv3.py --model-dir species_identification/outputs/mobilenetv3l
 """
 
+from __future__ import annotations
+
+import argparse
 import csv
-import json
 import os
 import signal
 import sys
 import time
-import numpy as np
+from pathlib import Path
+
 import cv2
 
-try:
-    from ai_edge_litert.interpreter import Interpreter
-except ImportError:
-    try:
-        from tflite_runtime.interpreter import Interpreter
-    except ImportError:
-        from tensorflow.lite import Interpreter
+_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(_ROOT / "species_identification" / "vision"))
+from tflite_classifier import TFLiteClassifierTTA  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
-# Config — same defaults as live_inference.py
+# Config defaults
 # ---------------------------------------------------------------------------
-MAIN_DIR        = "species_identification/outputs/"
-MODEL_PATH      = MAIN_DIR + "model_int8.tflite"
-CLASSES_PATH    = MAIN_DIR + "class_names.json"
-TEMP_PATH       = MAIN_DIR + "temperature.json"   # optional — T=1.0 if missing
-LOG_PATH        = MAIN_DIR + "predictions_tta.csv"
-CAPTURE_DIR     = MAIN_DIR + "captures_tta"
+DEFAULT_MODEL_DIR = _ROOT / "species_identification" / "outputs" / "deploy"
+LIVE_LOG_ROOT     = _ROOT / "species_identification" / "outputs" / "live"
 
 CAMERA_INDEX    = 1            # laptop external webcam is 1, built-in / Uno Q is 0
-IMG_SIZE        = 320
 TOP_K           = 5
 CONF_THRESH     = 0.15
 INFER_HZ        = 2.0          # TTA uses 4x inferences — keep rate modest
 LOG_EVERY_S     = 5.0
-SAVE_CONF       = 0.60
-SAVE_ALL_FRAMES = True
-
-# TTA views. Each entry is a crop fraction (1.0 = no crop) and whether
-# to horizontally flip. Keep this list short — each entry costs one
-# full forward pass.
-TTA_VIEWS = [
-    (1.00, False),   # original
-    (1.00, True),    # horizontal flip
-    (0.90, False),   # 90% center crop
-    (0.80, False),   # 80% center crop
-]
 
 
 # ---------------------------------------------------------------------------
-def _build_interpreter(model_path):
-    os.environ["TFLITE_DISABLE_XNNPACK"] = "1"
-    try:
-        from ai_edge_litert.interpreter import OpResolverType
-        return Interpreter(
-            model_path=model_path,
-            num_threads=4,
-            experimental_op_resolver_type=OpResolverType.BUILTIN_REF,
-        )
-    except (ImportError, AttributeError, TypeError):
-        pass
-    return Interpreter(model_path=model_path, num_threads=4)
-
-
-def _center_crop(img, frac):
-    """Crop the central fraction of the image (H, W, C)."""
-    if frac >= 1.0:
-        return img
-    h, w = img.shape[:2]
-    new_h, new_w = int(h * frac), int(w * frac)
-    y0 = (h - new_h) // 2
-    x0 = (w - new_w) // 2
-    return img[y0:y0 + new_h, x0:x0 + new_w]
-
-
-class TFLiteClassifierTTA:
-    def __init__(self, model_path, class_names, temperature=1.0):
-        self.interpreter = _build_interpreter(model_path)
-        self.interpreter.allocate_tensors()
-        self.in_det  = self.interpreter.get_input_details()[0]
-        self.out_det = self.interpreter.get_output_details()[0]
-        self.class_names = class_names
-        self.temperature = max(float(temperature), 1e-3)   # avoid div-by-zero
-
-        self.in_scale,  self.in_zp  = self.in_det["quantization"]
-        self.out_scale, self.out_zp = self.out_det["quantization"]
-        self.is_qin  = self.in_det["dtype"]  == np.uint8
-        self.is_qout = self.out_det["dtype"] == np.uint8
-
-    def _preprocess_view(self, rgb_img, crop_frac, flip):
-        """Build one TTA view ready for the interpreter."""
-        img = _center_crop(rgb_img, crop_frac)
-        if flip:
-            img = img[:, ::-1, :]
-        img = cv2.resize(img, (IMG_SIZE, IMG_SIZE),
-                         interpolation=cv2.INTER_AREA)
-        x = img.astype(np.float32)
-        if self.is_qin:
-            x = x / self.in_scale + self.in_zp
-            x = np.clip(x, 0, 255).astype(np.uint8)
-        return np.expand_dims(x, 0)
-
-    def _infer_once(self, x):
-        """Returns softmax probabilities with temperature applied."""
-        self.interpreter.set_tensor(self.in_det["index"], x)
-        self.interpreter.invoke()
-        out = self.interpreter.get_tensor(self.out_det["index"])[0]
-        if self.is_qout:
-            # Dequantize to float logits, then apply temperature scaling
-            # before softmax. T<1 sharpens, T>1 softens.
-            logits = (out.astype(np.float32) - self.out_zp) * self.out_scale
-        else:
-            logits = out.astype(np.float32)
-        return _softmax(logits / self.temperature)
-
-    def predict(self, bgr):
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        # Average temperature-scaled softmax probs across all TTA views.
-        prob_sum = None
-        for crop_frac, flip in TTA_VIEWS:
-            x = self._preprocess_view(rgb, crop_frac, flip)
-            probs = self._infer_once(x)
-            prob_sum = probs if prob_sum is None else prob_sum + probs
-        probs = prob_sum / len(TTA_VIEWS)
-        top_idx = np.argsort(probs)[::-1][:TOP_K]
-        return [(self.class_names[i], float(probs[i])) for i in top_idx]
-
-
-def _softmax(x):
-    x = x - x.max()
-    e = np.exp(x)
-    return e / e.sum()
-
-
-def _annotate(frame, preds):
+def _annotate(frame, preds, tag="TTA"):
     h, w = frame.shape[:2]
     strip_h = 30 + 26 * len(preds)
     overlay = frame.copy()
@@ -168,7 +67,7 @@ def _annotate(frame, preds):
     cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
 
     cv2.putText(frame,
-                time.strftime("%Y-%m-%d %H:%M:%S") + "  [TTA]",
+                time.strftime("%Y-%m-%d %H:%M:%S") + f"  [{tag}]",
                 (10, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55,
                 (255, 255, 255), 1)
 
@@ -187,41 +86,40 @@ def _annotate(frame, preds):
 
 
 # ---------------------------------------------------------------------------
-def main():
-    with open(CLASSES_PATH) as f:
-        class_names = json.load(f)
+def main(default_model_dir: Path = DEFAULT_MODEL_DIR) -> int:
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--model-dir", type=Path, default=default_model_dir,
+                    help="directory with model_*.tflite + "
+                         "model_manifest.json")
+    ap.add_argument("--camera-index", type=int, default=CAMERA_INDEX)
+    ap.add_argument("--hz", type=float, default=INFER_HZ)
+    ap.add_argument("--no-save-frames", action="store_true",
+                    help="don't write an annotated capture every tick")
+    args = ap.parse_args()
 
-    # Load temperature scaling factor if available. Defaults to 1.0 (no-op).
-    temperature = 1.0
-    if os.path.exists(TEMP_PATH):
-        try:
-            with open(TEMP_PATH) as f:
-                temperature = float(json.load(f).get("temperature", 1.0))
-            print(f"[info] Loaded temperature T={temperature:.3f}", flush=True)
-        except Exception as e:
-            print(f"[warn] Could not read {TEMP_PATH} ({e}), using T=1.0",
-                  flush=True)
-    else:
-        print(f"[info] No {TEMP_PATH} found, using T=1.0 (uncalibrated)",
-              flush=True)
+    clf = TFLiteClassifierTTA.from_dir(args.model_dir)
+    print(f"[info] {clf.describe()}", flush=True)
 
-    clf = TFLiteClassifierTTA(MODEL_PATH, class_names, temperature=temperature)
-    print(f"[info] Loaded model with {len(class_names)} classes, "
-          f"{len(TTA_VIEWS)} TTA views", flush=True)
+    # Per-model log folder: comparing two models used to mean reading one
+    # CSV that both scripts appended to.
+    log_dir = LIVE_LOG_ROOT / args.model_dir.resolve().name
+    capture_dir = log_dir / "captures_tta"
+    log_path = log_dir / "predictions_tta.csv"
+    os.makedirs(capture_dir, exist_ok=True)
 
-    cap = cv2.VideoCapture(CAMERA_INDEX)
+    cap = cv2.VideoCapture(args.camera_index)
     if not cap.isOpened():
-        print(f"[error] Could not open /dev/video{CAMERA_INDEX}",
+        print(f"[error] Could not open /dev/video{args.camera_index}",
               file=sys.stderr)
-        sys.exit(1)
+        return 1
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    print("[info] Camera opened", flush=True)
+    print(f"[info] Camera opened; logging to {log_path}", flush=True)
 
-    os.makedirs(CAPTURE_DIR, exist_ok=True)
-
-    log_is_new = not os.path.exists(LOG_PATH)
-    log_file = open(LOG_PATH, "a", newline="", buffering=1)
+    log_is_new = not log_path.exists()
+    log_file = open(log_path, "a", newline="", buffering=1)
     writer = csv.writer(log_file)
     if log_is_new:
         writer.writerow(["timestamp_iso", "top1_label", "top1_conf",
@@ -235,7 +133,7 @@ def main():
     signal.signal(signal.SIGINT,  stop)
     signal.signal(signal.SIGTERM, stop)
 
-    period = 1.0 / INFER_HZ
+    period = 1.0 / args.hz
     last_label = None
     last_log_t = 0.0
     n_infer = 0
@@ -251,25 +149,24 @@ def main():
                 time.sleep(0.1)
                 continue
 
-            preds = clf.predict(frame)
+            preds = clf.predict(frame, top_k=TOP_K)
             n_infer += 1
             top_label, top_conf = preds[0]
 
-            if SAVE_ALL_FRAMES:
+            saved = ""
+            if not args.no_save_frames:
                 annotated = _annotate(frame.copy(), preds)
                 ts_tag = time.strftime("%Y%m%d_%H%M%S") + f"_{n_infer:05d}"
                 safe = top_label.replace(" ", "_").replace("/", "_")
-                out_path = os.path.join(
-                    CAPTURE_DIR,
-                    f"{ts_tag}_{safe}_{int(top_conf*100):02d}.jpg")
-                cv2.imwrite(out_path, annotated)
+                out_path = capture_dir / f"{ts_tag}_{safe}_{int(top_conf*100):02d}.jpg"
+                cv2.imwrite(str(out_path), annotated)
+                saved = out_path.name
 
             now = time.time()
             label_changed = (top_label != last_label)
             heartbeat = (now - last_log_t) >= LOG_EVERY_S
 
             if label_changed or heartbeat:
-                saved = ""
                 stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
                 line = f"[{stamp}] "
                 for name, p in preds[:3]:
@@ -295,11 +192,12 @@ def main():
         elapsed = time.time() - t_start
         print(f"[info] Ran {n_infer} TTA inferences in {elapsed:.1f}s "
               f"({n_infer/max(elapsed,1e-6):.2f} Hz, "
-              f"{len(TTA_VIEWS) * n_infer / max(elapsed,1e-6):.1f} "
+              f"{len(clf.tta_views) * n_infer / max(elapsed,1e-6):.1f} "
               f"total model runs/s)", flush=True)
         cap.release()
         log_file.close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

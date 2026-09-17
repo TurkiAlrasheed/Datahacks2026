@@ -1,46 +1,62 @@
 """
 Integration smoke test for RoboRangerPipeline.
 
-Builds a minimal in-memory SQLite database with the schema BlurbStore
-expects, plus a stub LLM and stub embedder, and runs the pipeline end-
-to-end through every code path:
+Builds a minimal in-memory corpus with the real schema (corpus_schema.py),
+plus a stub LLM and stub embedder, and runs the pipeline end-to-end through
+every code path:
 
-    - gate accepts -> chunks above threshold -> blurb_plus_chunks
-    - gate accepts -> no chunks above threshold -> blurb_only
     - gate rejects -> gate_rejected
     - species not in DB -> species_not_found
+    - gate accepts -> chunks above threshold -> blurb_plus_chunks
+    - gate accepts -> no chunks above threshold -> blurb_only
     - LLM raises -> llm_error
+    - gate accepts but intent OTHER -> intent_unclear
     - BlurbStore on a missing column -> raises BlurbStoreError
+    - high-confidence field intent -> blurb_direct (no retrieval, no LLM)
+    - field missing from the blurb -> falls through to the LLM, no crash
+    - retrieval is scoped to the species and never returns the blurb chunk
+    - a v1 (unpartitioned) corpus is refused by check_corpus_schema
+    - warmup() reaches retrieval + LLM and reports a failing LLM
 
 This isn't testing the *quality* of the pipeline — that's what the eval
 harnesses are for. This is testing the *plumbing*: every component is
 called with the right args, every failure mode returns a sensible
 Response, no exception escapes the orchestrator.
+
+Run from anywhere:
+    python species_identification/tests/test_pipeline_integration.py
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
-import struct
 import sys
-from typing import Sequence
+from pathlib import Path
 
 import numpy as np
-
-# Import sqlite_vec so we can build a vec0 virtual table for chunks.
 import sqlite_vec
-import sys
 
-sys.path.insert(1, "../species_identification/pipeline")
-sys.path.insert(2, "../species_identification/llm-tuning")
-from blurb_store import BlurbStore, BlurbStoreError
-from intent import Intent, IntentClassifier, IntentResult
-from pipeline import RoboRangerPipeline
-from prompt_builder import Blurb
-from wildlife_gate import WildlifeGate
+_SPECIES_DIR = Path(__file__).resolve().parents[1]
+for _sub in ("tests", "llm-tuning", "pipeline", "."):
+    _path = str((_SPECIES_DIR / _sub).resolve())
+    if _path not in sys.path:
+        sys.path.insert(1, _path)
 
-
-EMBED_DIM = 384
+from blurb_store import BlurbStore, BlurbStoreError  # noqa: E402
+from corpus_schema import (  # noqa: E402
+    EMBED_DIM,
+    CorpusSchemaError,
+    check_corpus_schema,
+    create_schema,
+    insert_vector,
+    pack_embedding,
+    refresh_manifest,
+)
+from intent import Intent, IntentResult  # noqa: E402
+from pipeline import RoboRangerPipeline  # noqa: E402
+from test_corpus import retrieve  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -49,24 +65,21 @@ EMBED_DIM = 384
 
 class StubEmbedder:
     """
-    Deterministic embedder: maps each input string to a vector via a hash.
-    Real embedders give meaningful similarity; this one gives pseudo-random
-    similarity that's stable across calls. That's enough to exercise the
-    plumbing — the actual centroid logic is tested in test_units.py.
-
-    For specific test queries, we override certain texts to land near or
-    far from chunk vectors so we can deterministically test threshold
-    filtering.
+    Deterministic embedder: maps each input string to a vector via sha256.
+    (Python's hash() is randomized per process, which made this fixture's
+    gate/intent outcomes change between runs.) Real embedders give
+    meaningful similarity; this one gives pseudo-random similarity that's
+    stable across calls and processes. That's enough to exercise the
+    plumbing.
     """
 
     def __init__(self, dim: int = EMBED_DIM) -> None:
         self.dim = dim
-        # Anchor vector — we'll make some test queries embed close to this
-        # and others embed orthogonal to it.
         self._anchor = self._stable_vec("anchor")
 
     def _stable_vec(self, key: str) -> np.ndarray:
-        seed = abs(hash(key)) % (2**32)
+        seed = int.from_bytes(hashlib.sha256(key.encode()).digest()[:8],
+                              "little")
         rng = np.random.default_rng(seed)
         v = rng.standard_normal(self.dim).astype(np.float32)
         v /= np.linalg.norm(v)
@@ -75,25 +88,20 @@ class StubEmbedder:
     def encode(self, texts, normalize_embeddings=True, show_progress_bar=False):
         out = []
         for t in texts:
-            t_low = t.lower()
-            # Test queries we'll use:
-            if "near" in t_low and "chunk" in t_low:
-                # very close to the anchor
-                v = self._anchor + 0.01 * self._stable_vec(t)
-            elif "far" in t_low and "chunk" in t_low:
-                # roughly orthogonal to the anchor
-                base = self._stable_vec(t)
-                v = base - (base @ self._anchor) * self._anchor
-            else:
-                v = self._stable_vec(t)
+            v = self._stable_vec(t)
             if normalize_embeddings:
                 v = v / np.linalg.norm(v)
             out.append(v.astype(np.float32))
         return np.stack(out)
 
-    @property
-    def anchor(self) -> np.ndarray:
-        return self._anchor
+    def near_anchor(self, key: str) -> np.ndarray:
+        v = self._anchor + 0.01 * self._stable_vec(key)
+        return v / np.linalg.norm(v)
+
+    def far_from_anchor(self, key: str) -> np.ndarray:
+        v = self._stable_vec(key)
+        v = v - (v @ self._anchor) * self._anchor
+        return v / np.linalg.norm(v)
 
 
 class StubLLM:
@@ -111,86 +119,90 @@ class StubLLM:
         return "stub response"
 
 
+class FixedClassifier:
+    """Intent classifier stub that always returns one result."""
+
+    def __init__(self, intent: Intent, confidence: str = "high",
+                 score: float = 0.85) -> None:
+        self.result = IntentResult(intent, confidence, score, 0.10, {})
+
+    def classify(self, q):
+        return self.result
+
+
 # ---------------------------------------------------------------------------
-# Test fixture: build a tiny corpus.db in memory
+# Test fixture: build a tiny v2 corpus in memory
 # ---------------------------------------------------------------------------
 
-def build_test_db(embedder: StubEmbedder) -> sqlite3.Connection:
-    """Create the schema BlurbStore + retriever expect, populated minimally."""
+FULL_BLURB = {
+    "common_name": "Test Critter",
+    "appearance": "A small spiny lizard with blue belly patches.",
+    "size": "10-15 cm body length",
+    "habitat": "Rocks and fences.",
+    "diet": "Insects and small arthropods.",
+    "behavior": "Active during the day; basks on sunny surfaces.",
+    "dangerous_to_humans": "no",
+    "dangerous_to_pets": "no",
+    "notable": "Reduces Lyme disease prevalence in its range.",
+}
+# Missing diet / habitat / size: direct-route formatters must fall through.
+SPARSE_BLURB = {
+    "common_name": "Sparse Critter",
+    "appearance": "A mostly undocumented beetle.",
+    "dangerous_to_humans": "no",
+    "dangerous_to_pets": "no",
+}
+
+NEAR_TEXT = "A near chunk that is highly relevant."
+FAR_TEXT = "A far chunk that is irrelevant."
+BLURB_TEXT = "Species: Testus testius\nDiet: Insects"
+OTHER_TEXT = "Another species' chunk that sits right on the anchor."
+
+
+def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.enable_load_extension(True)
     sqlite_vec.load(conn)
     conn.enable_load_extension(False)
+    return conn
 
-    # species table — matches the real corpus.db schema (JSON blurbs).
-    conn.execute("""
-        CREATE TABLE species (
-            species_id    TEXT PRIMARY KEY,
-            species_name  TEXT,
-            common_name   TEXT,
-            source        TEXT,
-            blurb_text    TEXT,
-            blurb_json    TEXT
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE chunks (
-            id          INTEGER PRIMARY KEY,
-            species_id  TEXT,
-            category    TEXT,
-            text        TEXT
-        )
-    """)
-    conn.execute(f"""
-        CREATE VIRTUAL TABLE chunk_vectors USING vec0(
-            embedding float[{EMBED_DIM}]
-        )
-    """)
 
-    # Insert one species with a complete blurb (JSON schema).
-    import json
-    blurb_json = json.dumps({
-        "common_name": "Test Critter",
-        "appearance": "A small spiny lizard with blue belly patches.",
-        "size": "10-15 cm body length",
-        "habitat": "Rocks and fences.",
-        "diet": "Insects and small arthropods.",
-        "behavior": "Active during the day; basks on sunny surfaces.",
-        "dangerous_to_humans": "no",
-        "dangerous_to_pets": "no",
-        "notable": "Reduces Lyme disease prevalence in its range.",
-    })
-    conn.execute("""
-        INSERT INTO species VALUES (?, ?, ?, ?, ?, ?)
-    """, (
-        "Test_species", "Testus testius", "Test Critter",
-        "wikipedia:Testus testius", "rendered text here", blurb_json,
-    ))
-    # Insert two chunks: one whose embedding is near the anchor (will pass
-    # any reasonable threshold), one that's far from the anchor.
-    near_text = "A near chunk that is highly relevant."
-    far_text = "A far chunk that is irrelevant."
-    near_emb = embedder._anchor + 0.01 * np.random.default_rng(0).standard_normal(EMBED_DIM).astype(np.float32)
-    near_emb /= np.linalg.norm(near_emb)
-    far_emb = embedder._stable_vec("orthogonal")
-    far_emb = far_emb - (far_emb @ embedder._anchor) * embedder._anchor
-    far_emb /= np.linalg.norm(far_emb)
+def build_test_db(embedder: StubEmbedder) -> sqlite3.Connection:
+    """Create the production schema, populated minimally."""
+    conn = _connect()
+    create_schema(conn)
 
-    cur = conn.cursor()
-    cur.execute("INSERT INTO chunks (species_id, category, text) VALUES (?,?,?)",
-                ("Test_species", "diet", near_text))
-    near_id = cur.lastrowid
-    cur.execute("INSERT INTO chunks (species_id, category, text) VALUES (?,?,?)",
-                ("Test_species", "habitat", far_text))
-    far_id = cur.lastrowid
+    species = [
+        ("Test_species", "Testus testius", "Test Critter", FULL_BLURB),
+        ("Sparse_species", "Sparsus sparsus", "", SPARSE_BLURB),
+        ("Other_species", "Alius alius", "Other Critter", FULL_BLURB),
+    ]
+    for sid, name, common, blurb in species:
+        conn.execute(
+            "INSERT INTO species(species_id, species_name, common_name, "
+            "source, blurb_text, blurb_json) VALUES (?, ?, ?, ?, ?, ?)",
+            (sid, name, common, f"wikipedia:{name}", "rendered text",
+             json.dumps(blurb)))
 
-    # Insert into the vector table at matching rowids.
-    for rid, vec in [(near_id, near_emb), (far_id, far_emb)]:
-        cur.execute(
-            "INSERT INTO chunk_vectors(rowid, embedding) VALUES (?, ?)",
-            (rid, struct.pack(f"{EMBED_DIM}f", *vec.tolist())),
-        )
+    # Test_species: one near chunk, one far chunk, and a blurb chunk placed
+    # right on the anchor (retrieval must still exclude it). Other_species
+    # and Sparse_species also get near-anchor chunks (retrieval for
+    # Test_species must never return them).
+    rows = [
+        ("Test_species", "diet", NEAR_TEXT, embedder.near_anchor("near")),
+        ("Test_species", "habitat", FAR_TEXT, embedder.far_from_anchor("far")),
+        ("Test_species", "blurb", BLURB_TEXT, embedder.near_anchor("blurb")),
+        ("Other_species", "diet", OTHER_TEXT, embedder.near_anchor("other")),
+        ("Sparse_species", "general", "Sparse beetle text.",
+         embedder.near_anchor("sparse")),
+    ]
+    for sid, cat, text, vec in rows:
+        cur = conn.execute(
+            "INSERT INTO chunks(species_id, category, text) VALUES (?, ?, ?)",
+            (sid, cat, text))
+        insert_vector(conn, cur.lastrowid, sid, cat, pack_embedding(vec))
     conn.commit()
+    refresh_manifest(conn)
     return conn
 
 
@@ -210,42 +222,29 @@ def main() -> int:
         retrieval_threshold=0.50,
     )
 
-    # Pick wildlife-shaped queries that the stub embedder happens to route
+    # Pick a wildlife-shaped query that the stub embedder happens to route
     # to the wildlife side. We discover these empirically rather than by
     # design — the stub embedder is deterministic but the gate's centroids
     # depend on the prototypes, so we need to find a query that lands
-    # right. Tests 2-5 all need a query that passes the gate. If we can't
-    # find one, tests skip with [SKIP].
+    # right. Tests that need one skip with [SKIP] if none is found.
     candidates = [
         "what does it eat",
         "is it venomous",
         "tell me about this species",
         "is it nocturnal",
         "where does it live",
+        "how can I identify it",
+        "is it endangered",
+        "what does it look like",
     ]
-    wildlife_query = None
-    for q in candidates:
-        if pipeline.gate.check(q).in_domain:
-            wildlife_query = q
-            break
+    wildlife_query = next(
+        (q for q in candidates if pipeline.gate.check(q).in_domain), None)
     if wildlife_query is None:
         print("WARNING: no candidate query passed the stub gate; "
-              "tests 2-5 will be SKIPPED. (This is a test-fixture "
+              "gate-dependent tests will be SKIPPED. (This is a test-fixture "
               "limitation, not a pipeline bug.)")
 
-    # The stub embedder produces noisy similarity, so intent classification
-    # results on synthetic queries are unreliable. Tests 3-5 are about
-    # pipeline plumbing for the happy path and shouldn't depend on stub
-    # embedder geometry — replace the intent classifier with a stub that
-    # always returns DIET with high confidence. Test 5b tests intent-based
-    # short-circuiting separately.
-    class _ConfidentDietClassifier:
-        def classify(self, q):
-            return IntentResult(Intent.DIET, "high", 0.85, 0.10, {})
-
     real_classifier = pipeline.intent_classifier
-    pipeline.intent_classifier = _ConfidentDietClassifier()
-
     failures = 0
 
     def check(label: str, condition: bool, detail: str = "") -> None:
@@ -257,10 +256,7 @@ def main() -> int:
 
     print("\n=== test 1: gate rejects an off-topic query ===")
     llm.calls.clear()
-    # We need the gate's off-topic centroid to win for this query. The stub
-    # embedder hashes deterministically, so this is best-effort: just check
-    # that *if* the gate rejects, the path is correct. If it accepts (because
-    # of stub-embedding noise), we skip; the gate's own tests cover quality.
+    # Best-effort with a stub embedder: check the path only if it rejects.
     resp = pipeline.answer("Test_species", "where is the bathroom")
     if resp.path == "gate_rejected":
         check("gate_rejected path returns MSG_OFF_TOPIC",
@@ -281,20 +277,27 @@ def main() -> int:
               "species" in resp.text.lower())
         check("LLM not called", len(llm.calls) == 0)
 
+    # Tests 3-5 exercise the retrieval + LLM path, so the stub intent must
+    # NOT be direct-routable (DIET/DANGER/SIZE/HABITAT/BEHAVIOR/DESCRIPTION
+    # at high confidence are answered from the blurb with no LLM).
+    pipeline.intent_classifier = FixedClassifier(Intent.IDENTIFICATION)
+
     print("\n=== test 3: chunks above threshold -> blurb_plus_chunks ===")
     if wildlife_query is None:
         print("  [SKIP]")
     else:
-        # The retriever uses a separate query-rewriting + embedding path, so
-        # we can't easily ensure chunks pass the threshold without a real
-        # embedder. Lower the threshold to ~zero so any chunk passes.
+        llm.calls.clear()
         pipeline.retrieval_threshold = -1.0
         resp = pipeline.answer("Test_species", wildlife_query)
         check("path is blurb_plus_chunks",
-              resp.path == "blurb_plus_chunks",
-              f"got {resp.path}")
+              resp.path == "blurb_plus_chunks", f"got {resp.path}")
         check("LLM was called", len(llm.calls) >= 1)
         check("at least one chunk used", len(resp.chunks_used) >= 1)
+        texts = {c.text for c in resp.chunks_used}
+        check("only this species' chunks retrieved",
+              texts <= {NEAR_TEXT, FAR_TEXT}, f"got {sorted(texts)}")
+        check("blurb chunk not retrieved (already in SPECIES FACTS)",
+              BLURB_TEXT not in texts)
         check("intent populated", resp.intent is not None)
         check("blurb populated and is right species",
               resp.blurb is not None
@@ -302,22 +305,20 @@ def main() -> int:
         check("latency dict has all stages",
               all(k in resp.latency
                   for k in ("gate", "blurb", "intent", "retrieval",
-                            "prompt", "llm", "total")))
+                            "prompt", "llm", "total")),
+              f"got {sorted(resp.latency)}")
         pipeline.retrieval_threshold = 0.50
 
     print("\n=== test 4: no chunks above threshold -> blurb_only ===")
     if wildlife_query is None:
         print("  [SKIP]")
     else:
-        # Threshold so high no chunk can pass.
         pipeline.retrieval_threshold = 0.99
         resp = pipeline.answer("Test_species", wildlife_query)
-        check("path is blurb_only",
-              resp.path == "blurb_only",
+        check("path is blurb_only", resp.path == "blurb_only",
               f"got {resp.path}")
         check("no chunks used", len(resp.chunks_used) == 0)
-        check("dropped chunks > 0",
-              resp.chunks_dropped > 0,
+        check("dropped chunks > 0", resp.chunks_dropped > 0,
               f"dropped={resp.chunks_dropped}")
         pipeline.retrieval_threshold = 0.50
 
@@ -328,72 +329,28 @@ def main() -> int:
         pipeline.retrieval_threshold = -1.0
         llm.should_raise = True
         resp = pipeline.answer("Test_species", wildlife_query)
-        check("path is llm_error", resp.path == "llm_error")
+        check("path is llm_error", resp.path == "llm_error",
+              f"got {resp.path}")
         check("error field populated",
-              resp.error and "stub error" in resp.error)
+              bool(resp.error) and "stub error" in resp.error)
         check("user-facing text doesn't leak the exception",
               "stub error" not in resp.text.lower())
         llm.should_raise = False
         pipeline.retrieval_threshold = 0.50
 
     print("\n=== test 5b: gate accepts but intent OTHER -> intent_unclear ===")
-    # Restore the real intent classifier — this test specifically exercises
-    # the intent-based short-circuit, so it can't run with a stubbed-confident
-    # classifier.
-    pipeline.intent_classifier = real_classifier
-
-    # Find a query that the gate accepts but the intent classifier is
-    # uncertain about. Same discovery pattern as wildlife_query — the
-    # stub embedder is deterministic but the centroid geometry depends
-    # on the prototypes, so we hunt for a fitting query.
-    unclear_query = None
-    candidates_unclear = [
-        # Wildlife-adjacent but not a real field-guide question:
-        "tell me a joke about it",
-        "what should I name it",
-        "is it cute",
-        "what's its astrological sign",
-        "do you like this animal",
-    ]
-    for q in candidates_unclear:
-        gate_r = pipeline.gate.check(q)
-        if not gate_r.in_domain:
-            continue
-        ir = pipeline.intent_classifier.classify(q)
-        if ir.intent == Intent.OTHER or ir.confidence == "low":
-            unclear_query = q
-            break
-
-    if unclear_query is None:
-        # Couldn't find a query satisfying both conditions. Force the
-        # branch deterministically by stubbing the classifier.
-        class _StubClassifier:
-            def classify(self, q):
-                return IntentResult(Intent.OTHER, "low", 0.4, 0.01, {})
-        original_clf = pipeline.intent_classifier
-        pipeline.intent_classifier = _StubClassifier()
-        try:
-            llm.calls.clear()
-            resp = pipeline.answer("Test_species", wildlife_query or "anything")
-            check("path is intent_unclear (forced)",
-                  resp.path == "intent_unclear",
-                  f"got {resp.path}")
-            check("LLM not called when intent unclear",
-                  len(llm.calls) == 0)
-            check("user-facing text guides them",
-                  "eats" in resp.text.lower() or "lives" in resp.text.lower())
-        finally:
-            pipeline.intent_classifier = original_clf
+    pipeline.intent_classifier = FixedClassifier(Intent.OTHER, "low", 0.4)
+    if wildlife_query is None:
+        print("  [SKIP]")
     else:
         llm.calls.clear()
-        resp = pipeline.answer("Test_species", unclear_query)
-        check("path is intent_unclear",
-              resp.path == "intent_unclear",
-              f"got {resp.path} for query {unclear_query!r}")
-        check("LLM not called when intent unclear",
-              len(llm.calls) == 0)
+        resp = pipeline.answer("Test_species", wildlife_query)
+        check("path is intent_unclear", resp.path == "intent_unclear",
+              f"got {resp.path}")
+        check("LLM not called when intent unclear", len(llm.calls) == 0)
         check("user-facing text guides them",
               "eats" in resp.text.lower() or "lives" in resp.text.lower())
+    pipeline.intent_classifier = real_classifier
 
     print("\n=== test 6: BlurbStore raises on missing schema ===")
     bad_conn = sqlite3.connect(":memory:")
@@ -406,6 +363,83 @@ def main() -> int:
     else:
         check("BlurbStoreError raised on missing columns", False)
     bad_conn.close()
+
+    print("\n=== test 7: high-confidence field intent -> blurb_direct ===")
+    if wildlife_query is None:
+        print("  [SKIP]")
+    else:
+        pipeline.intent_classifier = FixedClassifier(Intent.DIET)
+        llm.calls.clear()
+        resp = pipeline.answer("Test_species", wildlife_query)
+        check("path is blurb_direct", resp.path == "blurb_direct",
+              f"got {resp.path}")
+        check("answer comes from the diet field",
+              "insects" in resp.text.lower(), resp.text)
+        check("LLM not called on direct route", len(llm.calls) == 0)
+        check("retrieval skipped on direct route",
+              "retrieval" not in resp.latency)
+        pipeline.intent_classifier = real_classifier
+
+    print("\n=== test 8: missing blurb field -> falls through, no crash ===")
+    if wildlife_query is None:
+        print("  [SKIP]")
+    else:
+        pipeline.retrieval_threshold = -1.0
+        for intent in (Intent.DIET, Intent.HABITAT, Intent.SIZE):
+            pipeline.intent_classifier = FixedClassifier(intent)
+            llm.calls.clear()
+            try:
+                resp = pipeline.answer("Sparse_species", wildlife_query)
+            except Exception as e:  # the old formatters raised AttributeError
+                check(f"{intent.name}: no exception", False,
+                      f"{type(e).__name__}: {e}")
+                continue
+            check(f"{intent.name}: fell through to the LLM path",
+                  resp.path in ("blurb_plus_chunks", "blurb_only"),
+                  f"got {resp.path}")
+            check(f"{intent.name}: no 'None' rendered",
+                  "none" not in resp.text.lower(), resp.text)
+        pipeline.intent_classifier = real_classifier
+        pipeline.retrieval_threshold = 0.50
+
+    print("\n=== test 9: retrieval is partition-scoped and excludes blurb ===")
+    rows = retrieve(conn, embedder, "Test_species", "anything", k=10)
+    texts = [text for _, text, _ in rows]
+    check("returns every non-blurb chunk of the species (k > chunks)",
+          sorted(texts) == sorted([NEAR_TEXT, FAR_TEXT]), f"got {texts}")
+    check("no category='blurb' rows", all(cat != "blurb" for cat, _, _ in rows))
+
+    print("\n=== test 10: v1 corpus is refused ===")
+    v1 = _connect()
+    v1.execute(f"CREATE VIRTUAL TABLE chunk_vectors USING vec0("
+               f"embedding float[{EMBED_DIM}])")
+    try:
+        check_corpus_schema(v1)
+    except CorpusSchemaError as e:
+        check("CorpusSchemaError on v1 schema", True,
+              f"msg head: {str(e)[:50]}...")
+    else:
+        check("CorpusSchemaError on v1 schema", False)
+    v1.close()
+    try:
+        meta = check_corpus_schema(conn)
+        check("v2 fixture passes schema check with manifest",
+              meta.get("species_count") == "3", str(meta))
+    except CorpusSchemaError as e:
+        check("v2 fixture passes schema check", False, str(e))
+
+    print("\n=== test 11: warmup reaches retrieval + LLM ===")
+    llm.calls.clear()
+    timings = pipeline.warmup("Test_species")
+    check("warmup ran retrieval and LLM",
+          "retrieval" in timings and "llm" in timings and len(llm.calls) == 1,
+          str(timings))
+    check("no error reported", "error" not in timings, str(timings))
+    llm.should_raise = True
+    timings = pipeline.warmup("Test_species")
+    check("LLM failure reported, not raised", "error" in timings,
+          str(timings))
+    llm.should_raise = False
 
     print(f"\n=== {failures} failure(s) ===")
     return 1 if failures else 0

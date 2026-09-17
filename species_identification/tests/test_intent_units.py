@@ -14,8 +14,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import sys
+from pathlib import Path
 
-sys.path.insert(1, "../species_identification/llm-tuning")
+sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "llm-tuning"))
 from intent import Intent, IntentClassifier, IntentResult, PROTOTYPES
 from prompt_builder import (
     Blurb,

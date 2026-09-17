@@ -11,66 +11,122 @@ Loads an existing trained checkpoint and produces:
        was in there somewhere", which is useful — it means more data on those
        classes will help, vs. classes where the model has no clue).
 
-Reads the same _splits/ directory the training script created, so splits are
-identical to what the model was trained on. If _splits/ has been deleted,
+Reads the same cnn/_splits/ directory the training scripts create, so splits
+are identical to what the model was trained on. If _splits/ has been deleted,
 rebuild it with the same SEED before running this.
 
-Usage:
-    python diagnose.py
-    python diagnose.py --model ../outputs/best.keras --splits _splits
+Each trainer writes to its own outputs/<arch>/ folder, and --arch reads the
+model, class list and temperature from that one folder. They used to share
+outputs/, which is how a temperature fit on one run got applied to another
+model. The default model is final.keras: temperature.json is fit on that
+model, and it's the one the trainers export. best.keras is a mid-training
+checkpoint, and for mobilenetv2_qat it's the float model from before QAT.
+
+Usage (paths are resolved relative to this file, so any CWD works):
+    python species_identification/cnn/model_diagnostics.py --arch mobilenetv3l
+    python species_identification/cnn/model_diagnostics.py \\
+        --arch mobilenetv2_qat --splits path/to/_splits
 """
 
 import argparse
 import json
 import os
 import pathlib
+import sys
 
 import numpy as np
-import tensorflow as tf
-from tensorflow import keras
+
+# TensorFlow is imported in main(), after --arch is known: mobile_net_v2.py
+# trains under TF_USE_LEGACY_KERAS=1 (tf_keras, which tfmot needs), and that
+# has to be set before TensorFlow is first imported.
+_HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE.parent))
+sys.path.insert(0, str(_HERE.parent / "vision"))
+from export_tflite import ARCH_INPUT_RANGE  # noqa: E402
+from tflite_classifier import normalize as normalize_input  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
 # Config — matches the training script defaults
 # ---------------------------------------------------------------------------
-DEFAULT_MODEL    = "../outputs/best.keras"
-DEFAULT_SPLITS   = "_splits"
-DEFAULT_CLASSES  = "../outputs/class_names.json"
-DEFAULT_OUT_DIR  = "../outputs/diagnostics"
-DEFAULT_TEMP     = "../outputs/temperature.json"
-IMG_SIZE         = 320
+ARCHS            = ("mobilenetv3l", "mobilenetv3s", "mobilenetv2_qat")
+OUTPUTS_ROOT     = _HERE.parent / "outputs"          # <arch>/ lives under here
+DEFAULT_SPLITS   = _HERE / "_splits"
 BATCH_SIZE       = 16
+# Image size is read from the model's input shape (320 for V3-Large and V2,
+# 224 for V3-Small). The input domain per arch comes from ARCH_INPUT_RANGE,
+# the same table the exporter writes into model_manifest.json:
+#   mobilenetv3l / mobilenetv3s  raw_0_255  (Rescaling is inside the graph)
+#   mobilenetv2_qat              minus1_1   (train() feeds x / 127.5 - 1)
 
 
 # ---------------------------------------------------------------------------
 # Data loading — must match training-time preprocessing exactly
 # ---------------------------------------------------------------------------
-def load_test_set(splits_root, class_names):
+def load_test_set(splits_root, class_names, img_size):
+    import tensorflow as tf
+    from tensorflow import keras
+
+    # Yields float32 pixels in 0..255, same as the trainers' make_datasets().
+    # The per-arch input scaling happens in collect_predictions().
     test_ds = keras.utils.image_dataset_from_directory(
         pathlib.Path(splits_root) / "test",
         labels="inferred",
         label_mode="categorical",
         class_names=class_names,
-        image_size=(IMG_SIZE, IMG_SIZE),
+        image_size=(img_size, img_size),
         batch_size=BATCH_SIZE,
         shuffle=False,
     )
     return test_ds.prefetch(tf.data.AUTOTUNE)
 
 
+def has_rescaling_layer(model):
+    """True if a Rescaling layer sits anywhere in the (nested) model graph."""
+    for layer in model.layers:
+        if type(layer).__name__ == "Rescaling":
+            return True
+        if hasattr(layer, "layers") and has_rescaling_layer(layer):
+            return True
+    return False
+
+
+def check_input_contract(model, arch, input_range):
+    """Fail if the model's graph contradicts the input domain for --arch.
+
+    A wrong input domain doesn't raise anywhere; it just produces
+    chance-level predictions. MobileNetV3 (include_preprocessing=True) has
+    its Rescaling layer in the graph; mobile_net_v2.py's model has none
+    because the scaling is done in tf.data.
+    """
+    rescales = has_rescaling_layer(model)
+    if input_range == "raw_0_255" and not rescales:
+        raise SystemExit(
+            f"--arch {arch} expects raw 0..255 input with a Rescaling layer "
+            f"in the graph, but this model has none. Is it a "
+            f"mobilenetv2_qat model?")
+    if input_range == "minus1_1" and rescales:
+        raise SystemExit(
+            f"--arch {arch} scales input to [-1, 1] before the model, but "
+            f"this model also rescales in-graph. Is it a MobileNetV3 model?")
+
+
 # ---------------------------------------------------------------------------
 # Inference — collect predictions and labels
 # ---------------------------------------------------------------------------
-def collect_predictions(model, ds, temperature=1.0):
+def collect_predictions(model, ds, input_range, temperature=1.0):
     """Run inference and return (y_true, y_pred_top1, y_pred_top5, probs).
 
-    `probs` is the softmax-normalized prediction matrix (N, C). Temperature
-    scaling is applied to the logits before softmax — matches what the
-    inference pipeline does on the Uno Q.
+    Batches arrive as 0..255 pixels and are scaled to `input_range` with the
+    on-device classifier's normalize(), so float and device preprocessing
+    can't drift apart. `probs` is the softmax-normalized prediction matrix
+    (N, C). Temperature scaling is applied to the logits before softmax —
+    matches what the inference pipeline does on the Uno Q.
     """
     all_logits, all_labels = [], []
     for imgs, labels in ds:
-        logits = model(imgs, training=False).numpy()
+        x = normalize_input(imgs.numpy(), input_range)
+        logits = np.asarray(model(x, training=False))
         all_logits.append(logits)
         all_labels.append(labels.numpy())
     logits = np.concatenate(all_logits, axis=0)
@@ -292,41 +348,89 @@ def print_report(metrics, class_names, y_true, y_pred, top5):
 # Entry point
 # ---------------------------------------------------------------------------
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--model",   default=DEFAULT_MODEL)
-    ap.add_argument("--splits",  default=DEFAULT_SPLITS)
-    ap.add_argument("--classes", default=DEFAULT_CLASSES)
-    ap.add_argument("--temp",    default=DEFAULT_TEMP,
-                    help="path to temperature.json; ignored if missing")
-    ap.add_argument("--out",     default=DEFAULT_OUT_DIR)
+    ap = argparse.ArgumentParser(
+        description="Test-split diagnostics for one trained MobileNet "
+                    "species classifier.")
+    ap.add_argument("--arch", required=True, choices=ARCHS,
+                    help="which trainer's run to diagnose; sets the default "
+                         "paths (outputs/<arch>/) and the input scaling")
+    ap.add_argument("--model", type=pathlib.Path,
+                    help="default: outputs/<arch>/final.keras")
+    ap.add_argument("--splits", type=pathlib.Path, default=DEFAULT_SPLITS,
+                    help="split root containing test/; default: cnn/_splits")
+    ap.add_argument("--classes", type=pathlib.Path,
+                    help="default: outputs/<arch>/class_names.json")
+    ap.add_argument("--temp", type=pathlib.Path,
+                    help="temperature.json, ignored if missing; "
+                         "default: outputs/<arch>/temperature.json")
+    ap.add_argument("--out", type=pathlib.Path,
+                    help="default: outputs/<arch>/diagnostics")
     ap.add_argument("--top-confused", type=int, default=25)
     args = ap.parse_args()
 
-    os.makedirs(args.out, exist_ok=True)
+    arch_dir     = OUTPUTS_ROOT / args.arch
+    final_model  = arch_dir / "final.keras"
+    model_path   = args.model   or final_model
+    classes_path = args.classes or arch_dir / "class_names.json"
+    temp_path    = args.temp    or arch_dir / "temperature.json"
+    out_dir      = args.out     or arch_dir / "diagnostics"
+    input_range  = ARCH_INPUT_RANGE[args.arch]
 
-    print(f"Loading class names from {args.classes}")
-    with open(args.classes) as f:
+    missing = [p for p in (model_path, classes_path, args.splits / "test")
+               if not p.exists()]
+    if missing:
+        ap.error("not found: " + ", ".join(str(p) for p in missing)
+                 + f" (train {args.arch} first, or pass "
+                   "--model/--classes/--splits)")
+
+    print(f"Loading class names from {classes_path}")
+    with open(classes_path) as f:
         class_names = json.load(f)
     num_classes = len(class_names)
     print(f"  {num_classes} classes")
 
     # Temperature is optional — defaults to 1.0 if not found.
     T = 1.0
-    if os.path.exists(args.temp):
-        with open(args.temp) as f:
+    if temp_path.exists():
+        with open(temp_path) as f:
             T = float(json.load(f)["temperature"])
-        print(f"Loaded temperature T = {T:.3f}")
+        print(f"Loaded temperature T = {T:.3f} from {temp_path}")
+        if args.temp is None and model_path.resolve() != final_model.resolve():
+            print(f"WARNING: this temperature was fit on {final_model}, not "
+                  f"{model_path}. Pass --temp if it belongs to another model.")
     else:
         print("No temperature.json found, using T = 1.0 (raw logits).")
 
-    print(f"Loading model from {args.model}")
-    model = keras.models.load_model(args.model, compile=False)
+    if args.arch == "mobilenetv2_qat":
+        # Same as mobile_net_v2.py: tf_keras, set before TF is imported.
+        os.environ["TF_USE_LEGACY_KERAS"] = "1"
+    from tensorflow import keras
 
-    print(f"Loading test split from {args.splits}/test")
-    test_ds = load_test_set(args.splits, class_names)
+    print(f"Loading model from {model_path}")
+    if args.arch == "mobilenetv2_qat":
+        # QAT layers only deserialize inside tfmot's scope.
+        import tensorflow_model_optimization as tfmot
+        with tfmot.quantization.keras.quantize_scope():
+            model = keras.models.load_model(str(model_path), compile=False)
+    else:
+        model = keras.models.load_model(str(model_path), compile=False)
+
+    check_input_contract(model, args.arch, input_range)
+    n_out = int(model.output_shape[-1])
+    if n_out != num_classes:
+        raise SystemExit(f"model outputs {n_out} classes but {classes_path} "
+                         f"lists {num_classes}")
+    img_size = int(model.input_shape[1])
+    print(f"  input {img_size}x{img_size}, preprocessing {input_range}")
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    print(f"Loading test split from {args.splits / 'test'}")
+    test_ds = load_test_set(args.splits, class_names, img_size)
 
     print("Running inference on test set...")
-    y_true, y_pred, top5, probs = collect_predictions(model, test_ds, T)
+    y_true, y_pred, top5, probs = collect_predictions(
+        model, test_ds, input_range, T)
 
     print("Computing per-class metrics...")
     metrics = per_class_metrics(y_true, y_pred, top5, num_classes)
@@ -353,23 +457,23 @@ def main():
     print("SAVING ARTIFACTS")
     print("=" * 70)
 
-    cm_csv = pathlib.Path(args.out) / "confusion_matrix.csv"
+    cm_csv = out_dir / "confusion_matrix.csv"
     np.savetxt(cm_csv, cm, fmt="%d", delimiter=",",
                header=",".join(class_names), comments="")
     print(f"  {cm_csv}")
 
-    metrics_json = pathlib.Path(args.out) / "per_class_metrics.json"
+    metrics_json = out_dir / "per_class_metrics.json"
     with open(metrics_json, "w") as f:
         json.dump({class_names[c]: metrics[c] for c in range(num_classes)},
                   f, indent=2)
     print(f"  {metrics_json}")
 
-    pairs_json = pathlib.Path(args.out) / "confused_pairs.json"
+    pairs_json = out_dir / "confused_pairs.json"
     with open(pairs_json, "w") as f:
         json.dump(pairs, f, indent=2)
     print(f"  {pairs_json}")
 
-    cm_png = pathlib.Path(args.out) / "confusion_matrix.png"
+    cm_png = out_dir / "confusion_matrix.png"
     plot_confusion_matrix(cm, class_names, cm_png, normalize=True)
 
 

@@ -17,6 +17,7 @@ Pipeline:
 """
 
 import os
+import sys
 import json
 import pathlib
 import shutil
@@ -29,8 +30,14 @@ from tensorflow.keras import layers
 # ---------------------------------------------------------------------------
 # Config — tune these
 # ---------------------------------------------------------------------------
-DATA_DIR        = "../ucsd-data"               # folder-per-class root
-OUTPUT_DIR      = "../outputs"            # where models + logs go
+# Paths are anchored to this file so the script works from any CWD. Each
+# architecture writes to its own output folder so runs never overwrite each
+# other's class_names.json / test_results.json / model files.
+ARCH            = "mobilenetv3s"
+_HERE           = pathlib.Path(__file__).resolve().parent
+DATA_DIR        = _HERE.parent / "ucsd-data"            # folder-per-class root
+SPLITS_DIR      = _HERE / "_splits"                     # rebuilt every run
+OUTPUT_DIR      = _HERE.parent / "outputs" / ARCH       # models + logs
 IMG_SIZE        = 224                  # MobileNetV3-Small standard input
 BATCH_SIZE      = 32                   # CPU-friendly; drop to 16 if RAM-tight
 SEED            = 42
@@ -383,7 +390,7 @@ def compile_model(model, lr, num_classes):
 
 
 def train():
-    split_root, class_names = build_splits(DATA_DIR)
+    split_root, class_names = build_splits(DATA_DIR, SPLITS_DIR)
     num_classes = len(class_names)
     train_ds, val_ds, test_ds = make_datasets(split_root, class_names)
 
@@ -453,39 +460,26 @@ def train():
 # ---------------------------------------------------------------------------
 # 6. TFLite export — what you actually deploy to the Uno Q.
 # ---------------------------------------------------------------------------
-def export_tflite(model, test_ds):
+def export_tflite(model, class_names):
     # Float32 — easy baseline, larger file.
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     tflite_fp32 = converter.convert()
     with open(os.path.join(OUTPUT_DIR, "model_fp32.tflite"), "wb") as f:
         f.write(tflite_fp32)
-
-    # INT8 quantized — 3-4x smaller, 2-4x faster on ARM CPU.
-    def rep_dataset():
-        # ~100 representative samples for calibration.
-        count = 0
-        for imgs, _ in test_ds.unbatch().batch(1):
-            yield [tf.cast(imgs, tf.float32)]
-            count += 1
-            if count >= 100:
-                break
-
-    converter = tf.lite.TFLiteConverter.from_keras_model(model)
-    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter.representative_dataset = rep_dataset
-    converter.target_spec.supported_ops = [
-        tf.lite.OpsSet.TFLITE_BUILTINS_INT8,
-    ]
-    converter.inference_input_type  = tf.uint8
-    converter.inference_output_type = tf.uint8
-    tflite_int8 = converter.convert()
-    with open(os.path.join(OUTPUT_DIR, "model_int8.tflite"), "wb") as f:
-        f.write(tflite_int8)
-
     print(f"Saved: model_fp32.tflite ({len(tflite_fp32)/1e6:.2f} MB)")
-    print(f"Saved: model_int8.tflite ({len(tflite_int8)/1e6:.2f} MB)")
+
+    # INT8 via the shared exporter: calibrates on train+val (never test)
+    # and writes model_manifest.json declaring this model's input contract
+    # (raw 0..255 pixels, uint8 I/O — the rescale is inside the graph).
+    sys.path.insert(0, str(_HERE.parent))
+    from export_tflite import export_model
+    export_model(model, arch=ARCH, class_names=class_names,
+                 splits=SPLITS_DIR, out_dir=OUTPUT_DIR,
+                 keras_path=pathlib.Path(OUTPUT_DIR) / "final.keras")
+    print("Next: python species_identification/tests/eval_tflite.py "
+          f"--model-dir {OUTPUT_DIR} --write")
 
 
 if __name__ == "__main__":
     model, test_ds, class_names = train()
-    export_tflite(model, test_ds)
+    export_tflite(model, class_names)

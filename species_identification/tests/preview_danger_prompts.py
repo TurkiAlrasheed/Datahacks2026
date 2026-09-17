@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import sqlite3
 import sys
+from pathlib import Path
 
 import sqlite_vec
 
-sys.path.insert(1, "../species_identification/llm-tuning")
-sys.path.insert(1, "../species_identification/pipeline")
+sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "llm-tuning"))
+sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "pipeline"))
 from blurb_store import BlurbStore
 from intent import Intent, IntentResult
 from prompt_builder import build_messages, Chunk

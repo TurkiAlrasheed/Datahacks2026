@@ -23,12 +23,15 @@ import urllib.request
 
 # Shared sampling params. Pin these on both backends so cross-environment
 # differences come from the model runtime, not from sampler defaults.
+# max_tokens=100 is the UNO Q budget (200 was too slow there); Ollama used to
+# get 200 while llama.cpp hard-coded 100, so laptop evals didn't match the
+# device's answer length.
 SAMPLING = {
     "temperature": 0.2,
     "top_p": 0.9,
     "top_k": 40,
     "seed": 42,
-    "max_tokens": 200,
+    "max_tokens": 100,
 }
 
 
@@ -88,7 +91,7 @@ class LlamaCppBackend:
             "top_p": SAMPLING["top_p"],
             "top_k": SAMPLING["top_k"],
             "seed": SAMPLING["seed"],
-            "max_tokens": 100,                          # 200 was too slow
+            "max_tokens": SAMPLING["max_tokens"],
         }).encode()
         req = urllib.request.Request(
             f"{self.host}/v1/chat/completions",
