@@ -26,7 +26,7 @@ tests/eval_tflite.py --write does. Always compare against the float model
 
 Usage (from the repo root):
     python species_identification/export_tflite.py \\
-        --keras species_identification/outputs/best.keras \\
+        --keras species_identification/outputs/mobilenetv3l/best.keras \\
         --arch mobilenetv3l --quant dynamic \\
         --out species_identification/outputs/mobilenetv3l_dynamic
 """

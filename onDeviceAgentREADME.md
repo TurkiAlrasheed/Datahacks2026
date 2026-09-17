@@ -125,6 +125,12 @@ The code runs on Python 3.11, since newer versions break the package dependencie
 ```
 1. Train the classifier (writes to species_identification/outputs/<arch>/)
    python species_identification/cnn/mobile_net_v3l.py      (or mobile_net_v3s.py / mobile_net_v2.py)
+   Optional float-model diagnostics (per-class metrics, confusion matrix, most-confused pairs):
+   python species_identification/cnn/model_diagnostics.py --arch mobilenetv3l
+       Reads final.keras, class_names.json and temperature.json from outputs/<arch>/
+       (--model/--classes/--temp/--splits override), writes outputs/<arch>/diagnostics/.
+       Scales input the way that arch was trained (raw 0..255 for MobileNetV3,
+       x/127.5 - 1 for mobilenetv2_qat) and exits if the model's graph contradicts --arch.
 
 2. Export to TFLite + manifest (Keras models)
    python species_identification/export_tflite.py \
@@ -134,10 +140,11 @@ The code runs on Python 3.11, since newer versions break the package dependencie
        └── model_dynamic.tflite + model_manifest.json
    (PyTorch/DINOv2 models use export_int8_tflite_subprocess.py instead — ImageNet mean/std input.)
 
-3. Evaluate on the int8/TTA device path, fit temperature + threshold into the manifest
+3. Evaluate on the device path (LiteRT + 4-view TTA), fit temperature + threshold into the manifest
    python species_identification/tests/eval_tflite.py \
        --model-dir species_identification/outputs/mobilenetv3l_dynamic \
        --keras species_identification/outputs/mobilenetv3l/best.keras --workers 5 --write
+   --keras (optional) also reports top-1 agreement between the TFLite and float Keras models.
    Then copy the chosen model dir to species_identification/outputs/deploy/.
 
 4. Build species corpus  (run BEFORE compile_blurbs)
@@ -240,6 +247,8 @@ python3 full_roboranger_run.py \
 python3 full_roboranger_run.py --camera-test
 ```
 
+Saves one frame to `camera_test_<timestamp>.jpg` and exits. No voice, Whisper, or classifier files are needed; `--voice` and `--whisper-model` are only required for the full loop.
+
 ### Camera-only inference (no voice)
 
 ```bash
@@ -317,7 +326,7 @@ Feeding the wrong domain doesn't crash — it returns confident garbage. So ever
 
 Two problems this uncovered:
 
-1. **Training runs overwrote each other.** All three trainers wrote `best.keras`, `temperature.json`, `class_names.json`, `test_results.json` and `model_fp32.tflite` into the same `outputs/`. The deployed MobileNetV3-Large int8 file dated from May 19, while `temperature.json` came from a May 22 retrain that was never exported; `model_fp32.tflite` was actually the MobileNetV2 model; and both live-inference scripts shared one temperature file and one predictions log. Trainers now write to `outputs/<arch>/`, and temperature/threshold live in each model's manifest.
+1. **Training runs overwrote each other.** All three trainers wrote `best.keras`, `temperature.json`, `class_names.json`, `test_results.json` and `model_fp32.tflite` into the same `outputs/`. The deployed MobileNetV3-Large int8 file dated from May 19, while `temperature.json` came from a May 22 retrain that was never exported; `model_fp32.tflite` was actually the MobileNetV2 model; and both live-inference scripts shared one temperature file and one predictions log. Trainers now write to `outputs/<arch>/`, and temperature/threshold live in each model's manifest. `cnn/model_diagnostics.py` had the same problem: it read `best.keras` and `temperature.json` from the shared folder and assumed 320 px input for every model. It now takes `--arch`, reads from `outputs/<arch>/`, gets the image size from the model, and applies that architecture's input scaling.
 2. **Full-integer post-training quantization breaks MobileNetV3-Large.** Its hard-swish / squeeze-excite activations don't survive int8 PTQ. Measured through the device path (LiteRT, 4-view TTA) on a 2-images-per-class slice of test:
 
 | Model | TTA top-1 (slice) | agrees with float model |
@@ -415,7 +424,7 @@ With this model, the previous fixed 0.55 threshold gives 87.7% precision / 63.5%
     │   ├── mobile_net_v3s.py             # MobileNetV3-Small training → outputs/mobilenetv3s/
     │   ├── mobile_net_v3l.py             # MobileNetV3-Large training → outputs/mobilenetv3l/
     │   ├── mobile_net_v2.py              # MobileNetV2 + QAT training → outputs/mobilenetv2_qat/
-    │   ├── model_diagnostics.py          # post-training diagnostics
+    │   ├── model_diagnostics.py          # float-model test diagnostics (--arch) → outputs/<arch>/diagnostics/
     │   └── web-scraper.py                # additional image collection
     │
     ├── outputs/

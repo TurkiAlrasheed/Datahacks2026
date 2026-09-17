@@ -12,8 +12,10 @@ Three new techniques vs the MobileNetV3 training:
       on clean inputs.
     - Temperature scaling: after training, fit a single scalar T on
       validation logits. Divide logits by T at inference to correct
-      for under/over-confidence. Saved to outputs/temperature.json for
-      the inference script to apply.
+      for under/over-confidence. Fit on the QAT model saved as final.keras
+      and written to outputs/mobilenetv2_qat/temperature.json, where
+      cnn/model_diagnostics.py reads it. The export uses it as the
+      manifest's starting T; tests/eval_tflite.py --write refits it.
 
 Dataset layout expected:
     data/
