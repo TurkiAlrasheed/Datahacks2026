@@ -39,6 +39,17 @@ SYSTEM_PROMPT = (
     "say you don't know."
 )
 
+# The section headings of the user message (build_messages), plus the
+# VERDICT line of danger prompts. An answer that contains one is the model
+# copying its prompt instead of answering (SmolLM2-360M once read
+# "SPECIES FACTS: Species: Song sparrow ... - appearance: ..." to a
+# visitor). pipeline_factory passes these to the backends as stop strings,
+# and the pipeline drops any sentence that contains one (see
+# pipeline._echoes_prompt).
+PROMPT_HEADINGS = (
+    "SPECIES FACTS:", "SNIPPETS:", "VISITOR QUESTION:", "TASK:", "VERDICT:",
+)
+
 
 # Intent-specific closing instructions. Kept short — every token costs latency.
 TASK_INSTRUCTIONS: dict[Intent, str] = {
@@ -323,6 +334,10 @@ _FIELD_ORDER = [
     ("notable",        "notable"),
 ]
 
+# The "- <label>:" lines of the SPECIES FACTS block, for spotting an answer
+# that copies them (see PROMPT_HEADINGS).
+FACT_LABELS = tuple(label for label, _ in _FIELD_ORDER) + ("danger",)
+
 # Map from intent to which field should lead. DANGER is handled specially
 # below since the danger line spans two attributes. CONSERVATION isn't in
 # the schema, so it falls through to default ordering.
@@ -463,6 +478,10 @@ def build_messages(
     Return a messages list suitable for llama.cpp's chat completion endpoint
     or for manual templating. Decoupled from the chat template so you can
     swap models without rewriting prompt logic.
+
+    The user message opens with the SPECIES FACTS block, which depends only
+    on the species and the intent (see build_prefix_messages); the parts
+    that change with every question come after it.
     """
     intent = intent_result.intent
 
@@ -472,23 +491,20 @@ def build_messages(
     # the directive's lead word are rephrased to match the question, so
     # the model can paraphrase rather than reason about polarity flips.
     if intent == Intent.DANGER:
-        polarity = _question_polarity(query)
         task_line = _danger_directive(
             blurb.dangerous_to_humans,
             blurb.dangerous_to_pets,
-            polarity=polarity,
+            polarity=_question_polarity(query),
         )
-        blurb_block = _format_blurb(blurb, intent, danger_polarity=polarity)
     else:
         task_line = TASK_INSTRUCTIONS.get(
             intent, TASK_INSTRUCTIONS[Intent.OTHER]
         )
-        blurb_block = _format_blurb(blurb, intent)
 
     chunks_block = _format_chunks(chunks)
 
     user_content = (
-        f"SPECIES FACTS:\n{blurb_block}\n\n"
+        _species_facts(blurb, intent, query) + "\n\n"
         f"SNIPPETS:\n{chunks_block}\n\n"
         f"VISITOR QUESTION: {query}\n\n"
         f"TASK: {task_line}"
@@ -498,6 +514,42 @@ def build_messages(
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
     ]
+
+
+def build_prefix_messages(
+    *,
+    blurb: Blurb,
+    intent_result: IntentResult,
+    query: str = "",
+) -> list[dict]:
+    """
+    The part of build_messages() that every question with this species and
+    intent shares: the system prompt and the SPECIES FACTS block, without
+    the snippets, question and task that follow it.
+
+    The startup warmup sends this with max_tokens=1 so llama.cpp caches
+    exactly the prefix a real question will reuse. The snippets and question
+    differ per question, and on the UNO Q each uncached prompt token costs
+    ~60 ms, so warming them would only lengthen the warmup. The user content
+    stops before the "\\n\\n" separator, so the cached tokens end on the
+    same token boundary as in the full prompt.
+    """
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user",
+         "content": _species_facts(blurb, intent_result.intent, query)},
+    ]
+
+
+def _species_facts(blurb: Blurb, intent: Intent, query: str) -> str:
+    """'SPECIES FACTS:' plus the blurb, ordered for the intent. For DANGER
+    the VERDICT wording follows the question's polarity."""
+    if intent == Intent.DANGER:
+        block = _format_blurb(blurb, intent,
+                              danger_polarity=_question_polarity(query))
+    else:
+        block = _format_blurb(blurb, intent)
+    return f"SPECIES FACTS:\n{block}"
 
 
 def _apply_chatml(messages: list[dict]) -> str:

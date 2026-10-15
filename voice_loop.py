@@ -50,7 +50,6 @@ import tempfile
 import time
 import wave
 from pathlib import Path
-from species_identification.tests.mem_check import print_total_rss, growth_check
 
 import numpy as np
 
@@ -75,11 +74,13 @@ except ImportError:
           file=sys.stderr)
     raise
 
-sys.path.insert(1, "species_identification/pipeline")
-sys.path.insert(2, "species_identification/llm-tuning")
-sys.path.insert(3, "species_identification/tests")
-from pipeline_factory import build_pipeline
-from pipeline import RoboRangerPipeline, Response
+_ROOT = Path(__file__).resolve().parent
+sys.path.insert(1, str(_ROOT / "species_identification/pipeline"))
+sys.path.insert(2, str(_ROOT / "species_identification/llm-tuning"))
+sys.path.insert(3, str(_ROOT / "species_identification/tests"))
+from mem_check import print_total_rss, growth_check  # noqa: E402
+from pipeline_factory import build_pipeline  # noqa: E402
+from pipeline import RoboRangerPipeline, Response  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +305,7 @@ def main() -> int:
     # Pipeline args — kept identical to run_pipeline.py so muscle memory
     # transfers and the two scripts can share command lines.
     p.add_argument("--db",
-                   default="species_identification/offline-info/corpus.db",
+                   default=str(_ROOT / "species_identification/offline-info/corpus.db"),
                    help="path to corpus.db")
     p.add_argument("--backend", choices=("ollama", "llama-cpp"),
                    default="ollama",
@@ -372,12 +373,14 @@ def main() -> int:
     print(f"  built in {time.perf_counter() - t:.1f}s")
 
     # Warm-up: first .encode() / first vector query / llama prefix cache
-    # are all slower than steady state. Run one throwaway query so the
-    # first *real* utterance isn't misleadingly slow. 
+    # are all slower than steady state. pipeline.warmup() exercises all
+    # three (a throwaway answer() is rejected before retrieval or the LLM).
     print("warming up...", end=" ", flush=True)
     t = time.perf_counter()
-    pipeline.answer(args.species, "warmup query, ignore")
+    warm = pipeline.warmup(args.species)
     print(f"({(time.perf_counter() - t) * 1000:.0f}ms)")
+    if "error" in warm:
+        print(f"warn: warmup: {warm['error']}", file=sys.stderr)
     growth_check(pipeline, args.species, n=12)
 
     return voice_repl(pipeline, args.species, whisper_model, voice)

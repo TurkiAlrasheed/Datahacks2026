@@ -35,9 +35,12 @@ import json
 import logging
 import sqlite3
 import sys
+from pathlib import Path
 
-sys.path.insert(1, "../species_identification/llm-tuning")
-from prompt_builder import Blurb, DANGER_LEVELS
+_LLM_TUNING = str(Path(__file__).resolve().parents[1] / "llm-tuning")
+if _LLM_TUNING not in sys.path:
+    sys.path.insert(1, _LLM_TUNING)
+from prompt_builder import Blurb, DANGER_LEVELS  # noqa: E402
 
 log = logging.getLogger(__name__)
 

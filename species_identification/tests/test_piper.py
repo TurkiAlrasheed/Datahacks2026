@@ -1,7 +1,8 @@
 import sys
+from pathlib import Path
 import time 
 
-sys.path.insert(1, "../species_identification/tts-and-stt")
+sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "tts-and-stt"))
 from piper_audio import speak_streaming
 from piper_loader import PiperLoader
 

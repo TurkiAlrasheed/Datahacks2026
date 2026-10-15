@@ -38,11 +38,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Callable
 
-sys.path.insert(1, "../species_identification/pipeline")
-sys.path.insert(2, "../species_identification/llm-tuning")
+sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "pipeline"))
+sys.path.insert(2, str(Path(__file__).resolve().parents[1] / "llm-tuning"))
 from intent import IntentClassifier, Intent
 from prompt_builder import Blurb, Chunk, build_messages, build_prompt
 

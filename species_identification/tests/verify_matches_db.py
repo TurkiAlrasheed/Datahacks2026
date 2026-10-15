@@ -15,12 +15,13 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 import sqlite3
 
 import sqlite_vec
 
-sys.path.insert(1, "../species_identification/llm-tuning")
-sys.path.insert(2, "../species_identification/pipeline")
+sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "llm-tuning"))
+sys.path.insert(2, str(Path(__file__).resolve().parents[1] / "pipeline"))
 from blurb_store import BlurbStore
 from intent import Intent, IntentResult
 from prompt_builder import DANGER_LEVELS, build_messages

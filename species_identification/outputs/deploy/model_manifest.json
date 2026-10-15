@@ -1,0 +1,109 @@
+{
+  "model_file": "model_dynamic.tflite",
+  "arch": "mobilenetv3l",
+  "input_range": "raw_0_255",
+  "img_size": 320,
+  "input_dtype": "float32",
+  "class_names": [
+    "Allograpta_obliqua",
+    "Apis_mellifera",
+    "Artemisia_californica",
+    "Bombus_vosnesenskii",
+    "Bubo_virginianus",
+    "Buteo_lineatus",
+    "Calypte_anna",
+    "Canis_latrans",
+    "Corvus_corax",
+    "Cotinis_mutabilis",
+    "Cycloneda_sanguinea",
+    "Danaus_plexippus",
+    "Dione_vanillae",
+    "Diplacus_puniceus",
+    "Encelia_californica",
+    "Eriogonum_fasciculatum",
+    "Euphorbia_maculata",
+    "Euphorbia_peplus",
+    "Euphorbia_serpens",
+    "Haemorhous_mexicanus",
+    "Harmonia_axyridis",
+    "Heteromeles_arbutifolia",
+    "Hylephila_phyleus",
+    "Hyles_lineata",
+    "Junco_hyemalis",
+    "Laetiporus_gilbertsonii",
+    "Leiothlypis_celata",
+    "Marah_macrocarpa",
+    "Melospiza_melodia",
+    "Nymphalis_antiopa",
+    "Omphalotus_olivascens",
+    "Otospermophilus_beecheyi",
+    "Oxalis_pes-caprae",
+    "Papilio_rutulus",
+    "Paropsis_atomaria",
+    "Procyon_lotor",
+    "Quercus_agrifolia",
+    "Rhus_integrifolia",
+    "Salvia_mellifera",
+    "Sayornis_nigricans",
+    "Sceloporus_occidentalis",
+    "Schistocerca_nitens",
+    "seashore",
+    "Sialia_mexicana",
+    "Sisyrinchium_bellum",
+    "Spinus_psaltria",
+    "Steatoda_nobilis",
+    "Sylvilagus_audubonii",
+    "Trifolium_repens",
+    "Tyrannus_vociferans",
+    "Zenaida_macroura"
+  ],
+  "negative_classes": [
+    "seashore"
+  ],
+  "temperature": 1.0,
+  "id_threshold": 0.63,
+  "tta_views": [
+    [
+      1.0,
+      false
+    ],
+    [
+      1.0,
+      true
+    ],
+    [
+      0.9,
+      false
+    ],
+    [
+      0.8,
+      false
+    ]
+  ],
+  "source": {
+    "tflite_sha256": "30d7d4ed4869892a137f0af7f07fa1a524de5e5203a52885f10b1b0b8459236b",
+    "converter": "tf.lite.TFLiteConverter.from_keras_model (dynamic)",
+    "calibration": "none (no activation quantization)",
+    "notes": "temperature and id_threshold fit by tests/eval_tflite.py on this model's TTA-averaged val output; see eval. Chosen for deploy: full-int8 PTQ of the same checkpoint scored ~17% top-1 (see onDeviceAgentREADME.md).",
+    "keras": "species_identification/outputs/best.keras",
+    "keras_sha256": "96422c9edfda95ee0da88306ca6f53367102f83b7d7f5bcdf7cea7168fe29438",
+    "keras_mtime": "2026-05-22T10:19:55+00:00",
+    "deployed_from": "species_identification/outputs/mobilenetv3l_dynamic"
+  },
+  "eval": {
+    "evaluated_at": "2026-09-17T03:51:21+00:00",
+    "splits": "species_identification/cnn/_splits",
+    "runtime": "ai-edge-litert, default kernels",
+    "temperature_fit_on": "val, TTA-averaged softmax of this exported model (min NLL)",
+    "id_threshold_rule": "lowest threshold with val precision >= 0.9",
+    "test_single_top1": 0.7773,
+    "test_tta_top1": 0.7954,
+    "test_tta_top5": 0.9421,
+    "test_ece": 0.0233,
+    "test_precision": 0.9113,
+    "test_coverage": 0.5956,
+    "test_negative_false_accept": 0.0,
+    "tflite_vs_float_top1_agreement_test": 0.9408
+  },
+  "created_at": "2026-09-17T02:08:34+00:00"
+}

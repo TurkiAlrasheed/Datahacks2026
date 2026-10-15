@@ -14,10 +14,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import sys
+from pathlib import Path
 
-sys.path.insert(1, "../species_identification/llm-tuning")
+sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "llm-tuning"))
 from intent import Intent, IntentClassifier, IntentResult, PROTOTYPES
 from prompt_builder import (
+    FACT_LABELS,
+    PROMPT_HEADINGS,
     Blurb,
     Chunk,
     MAX_BLURB_CHARS,
@@ -28,6 +31,7 @@ from prompt_builder import (
     _format_danger_verdict,
     _question_polarity,
     build_messages,
+    build_prefix_messages,
     build_prompt,
 )
 from wildlife_gate import (
@@ -160,6 +164,13 @@ class TestIntentClassifier:
         for s in r.all_scores.values():
             assert -1.001 <= s <= 1.001
 
+    def test_precomputed_embedding_is_used(self, stub_clf):
+        # The pipeline encodes the query once and hands the vector over; the
+        # text is then only checked for emptiness.
+        q_emb = stub_clf.embedder.encode(["__intent__:DIET"])[0]
+        r = stub_clf.classify("anything at all", q_emb=q_emb)
+        assert r == stub_clf.classify("__intent__:DIET")
+
 
 # ===========================================================================
 # Wildlife gate tests
@@ -215,6 +226,11 @@ class TestWildlifeGate:
             r.margin, r.wildlife_score - r.off_topic_score, atol=1e-5
         )
 
+    def test_precomputed_embedding_is_used(self, stub_gate):
+        q_emb = stub_gate.embedder.encode(["__wildlife__"])[0]
+        r = stub_gate.check("anything at all", q_emb=q_emb)
+        assert r == stub_gate.check("__wildlife__")
+
 
 
 
@@ -256,6 +272,37 @@ def _ir(intent: Intent, confidence: str = "high") -> IntentResult:
 
 
 class TestPromptBuilder:
+
+    def test_prefix_messages_are_a_prefix_of_every_prompt(
+            self, sample_blurb, sample_chunks):
+        # The startup warmup prefills build_prefix_messages(); the cache only
+        # helps if a real prompt for the same intent starts with it.
+        for intent in Intent:
+            for query in ("is it dangerous?", "is it safe to touch?",
+                          "what does it eat?"):
+                full = build_messages(query=query, blurb=sample_blurb,
+                                      chunks=sample_chunks,
+                                      intent_result=_ir(intent))
+                prefix = build_prefix_messages(blurb=sample_blurb,
+                                               intent_result=_ir(intent),
+                                               query=query)
+                assert prefix[0] == full[0]
+                assert full[1]["content"].startswith(
+                    prefix[1]["content"] + "\n\nSNIPPETS:")
+
+    def test_prompt_headings_match_the_prompt(self, sample_blurb,
+                                              sample_chunks):
+        # PROMPT_HEADINGS are the stop strings and echo markers; they must
+        # be the headings build_messages() actually writes.
+        text = "\n".join(
+            build_messages(query="is it dangerous?", blurb=sample_blurb,
+                           chunks=sample_chunks,
+                           intent_result=_ir(i))[1]["content"]
+            for i in (Intent.DANGER, Intent.DIET))
+        for heading in PROMPT_HEADINGS:
+            assert heading in text, heading
+        for label in FACT_LABELS:
+            assert f"- {label}:" in text, label
 
     def test_messages_have_system_and_user(self, sample_blurb, sample_chunks):
         msgs = build_messages(

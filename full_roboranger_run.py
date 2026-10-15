@@ -7,15 +7,43 @@ that stays a pure (species_id, query) -> Response function with no I/O, so
 it stays testable and run_pipeline.py keeps working unchanged. All the
 microphone / speaker / camera / model-loading I/O lives here, at the edges:
 
-    camera frame   ->  MobileNetV2 (TTA)  ->  species_id   (CV in, once)
-    button down/up ->  record audio       ->  STT in
+    camera frame   ->  TFLite classifier (TTA) -> species_id (CV in, once)
+    button down/up ->  record audio            -> STT in
     whisper        ->  query string
-    pipeline.answer->  Response                              (UNCHANGED core)
-    resp.text      ->  piper                                 (TTS out)
+    pipeline.answer->  Response, sentence by sentence while the LLM streams
+    sentences      ->  Speaker (piper synth thread + player thread)  (TTS out)
 
 Species is identified ONCE at startup. Point the robot, classify, then
-take questions. To re-identify, restart the loop — keeps the per-turn
-latency budget intact (no ~1s camera+TTA on every button press).
+take questions. A failed identification (low confidence, seashore, camera
+hiccup) asks you to try again instead of exiting, so a retry doesn't reload
+every model. To re-identify after that, restart the loop — keeps the
+per-turn latency budget intact (no ~1s camera+TTA on every button press).
+
+Startup overlaps work with the visitor's own time: Whisper, the embedder,
+the gate/intent centroids and the LLM weights all load on background
+threads while the camera is being aimed. The identification is announced
+the moment it is made, and the push-to-talk prompt follows the
+announcement: nothing is joined before it. The LLM prefill for the species
+runs on its own thread (with its own corpus connection, since sqlite3
+connections are bound to their creating thread) as soon as the components
+are loaded, while the visitor presses the button and talks. Whisper is
+joined at the first transcription and the pipeline is built at the first
+question.
+
+Speech synthesis is capped at --tts-threads (1) so that speaking an answer
+doesn't take cores from llama-server while it is still generating, and
+Whisper's encoder window is sized to each clip (--whisper-audio-ctx).
+
+Each answer is spoken while it is generated: the pipeline hands over every
+complete sentence as the LLM streams it, and a pre-rendered filler line
+("Gathering all the information...") covers the prompt processing when a
+question goes to the LLM.
+
+The classifier is whatever model lives in --model-dir (default
+species_identification/outputs/deploy): a model_*.tflite plus
+model_manifest.json, which names the .tflite file and declares the input
+preprocessing, class order, temperature and identification threshold. See
+species_identification/vision/tflite_classifier.py.
 
 Usage:
     # Identify from camera, then chat:
@@ -34,7 +62,8 @@ Requirements:
     A piper voice .onnx (+ .onnx.json sibling).
     Ollama installed and running (when on ollama backend).
     A whisper.cpp ggml model (ggml-tiny.en-q5_1.bin recommended).
-    A trained model_*.tflite + class_names.json + (optional) temperature.json.
+    A model dir with model_*.tflite + model_manifest.json.
+    A schema v2 corpus.db (species-partitioned vectors).
 
 Press-to-talk prototype: this uses <enter> as the button (press to start
 recording, press again to stop). On the device, swap record_utterance()
@@ -45,15 +74,23 @@ needs to change for the hardware port.
 from __future__ import annotations
 
 import argparse
-import os
+import atexit
+import hashlib
+import inspect
+import json
+import math
+import platform
 import queue
+import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import wave
+from datetime import datetime, timezone
 from pathlib import Path
-from species_identification.tests.mem_check import print_total_rss, growth_check
+from typing import Callable, Iterator
 
 import numpy as np
 
@@ -84,16 +121,20 @@ except ImportError:
           file=sys.stderr)
     raise
 
-sys.path.insert(1, "species_identification/pipeline")
-sys.path.insert(2, "species_identification/llm-tuning")
-sys.path.insert(3, "species_identification/tests")
-from pipeline_factory import build_pipeline
-from pipeline import RoboRangerPipeline, Response
-
-# The classifier lives in live_inference.py. We import the class only —
-# the if __name__ == "__main__" guard there keeps the standalone loop
-# from running on import.
-from live_inference_mv3 import TFLiteClassifierTTA
+# Resolve project modules from this file's location, not the caller's CWD.
+_ROOT = Path(__file__).resolve().parent
+for _sub in ("species_identification/vision", "species_identification/tests",
+             "species_identification/llm-tuning",
+             "species_identification/pipeline", "species_identification"):
+    sys.path.insert(1, str(_ROOT / _sub))
+from corpus_schema import (CorpusSchemaError, check_corpus_schema,  # noqa: E402
+                           read_meta)
+from mem_check import print_total_rss, growth_check  # noqa: E402
+from pipeline import RoboRangerPipeline, Response  # noqa: E402
+from pipeline_factory import build_pipeline, prewarm_components  # noqa: E402
+from test_corpus import _get_common_name, open_db  # noqa: E402
+from tflite_classifier import (ModelContractError,  # noqa: E402
+                               TFLiteClassifierTTA)
 
 
 # ---------------------------------------------------------------------------
@@ -109,26 +150,39 @@ DTYPE = "int16"
 # of silence (which whisper will happily hallucinate words onto).
 MIN_UTTERANCE_SEC = 0.3
 
+# whisper.cpp pads every clip to a 30 s window (encoder context 1500, 50 per
+# second of audio), so a 2 s question costs as much to encode as a 30 s one.
+# transcribe() sizes the window to the clip instead: 50 per second plus a
+# margin, never below --whisper-audio-ctx. 256 (about 5 s) measured fastest
+# on the UNO Q: 0.69 s at 4 threads (species_identification/tests/
+# bench_stt.py).
+AUDIO_CTX_PER_SEC = 50
+AUDIO_CTX_PAD = 32
+AUDIO_CTX_MAX = 1500
+DEFAULT_MIN_AUDIO_CTX = 256
+
 
 # ---------------------------------------------------------------------------
 # Vision constants
 # ---------------------------------------------------------------------------
 
-# Below this confidence we refuse to identify and abort the session
-# rather than running the pipeline on a guess. Sits roughly where the
-# classifier's calibrated probabilities stop being meaningful — adjust
-# after looking at predictions_tta.csv from a real walk.
-ID_CONF_THRESHOLD = 0.55
+# The identification threshold, temperature and negative classes (e.g.
+# "seashore" -> "no animal") come from the model's manifest: the threshold
+# is fit by tests/eval_tflite.py on the int8 model's TTA-averaged
+# probabilities, which is the distribution it is applied to here.
+DEFAULT_MODEL_DIR = _ROOT / "species_identification" / "outputs" / "deploy"
 
 # Number of throwaway frames before the "real" capture. Cheap cameras
 # (and V4L2 on Linux) buffer 1-2 stale frames; reading them flushes the
 # pipe so we classify what's actually in front of the robot.
 CAMERA_WARMUP_FRAMES = 5
 
-# "seashore" is the special non-species class baked into class_names.json.
-# If the top prediction is seashore, we should treat it as "no animal" and
-# refuse, even if confidence is high.
-NON_SPECIES_LABELS = {"seashore"}
+REFUSAL_MESSAGES = {
+    "negative_class": ("I do not see any animals right now. "
+                       "Point me at something and try again."),
+    "low_confidence": ("I am not sure what I see. Try moving closer or "
+                       "pointing me more directly at the animal."),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +224,9 @@ def _annotate_id_frame(frame: np.ndarray,
 
 def identify_species(classifier: TFLiteClassifierTTA,
                      camera_index: int,
-                     conf_threshold: float,
+                     conf_threshold: float | None = None,
                      save_dir: Path | None = None,
+                     common_names: dict[str, str] | None = None,
                      ) -> tuple[str | None, float, str]:
     """
     Grab one frame and classify it. Returns (species_id, confidence, message).
@@ -186,6 +241,10 @@ def identify_species(classifier: TFLiteClassifierTTA,
       - id_annotated_<timestamp>.jpg: with top-3 predictions burned in
     Look at these after a run to confirm the camera was actually used and
     pointed at the right thing.
+
+    common_names maps species_id -> the name to announce ("song sparrow"
+    rather than "Melospiza melodia"); labels missing from it are spoken as
+    the scientific name.
 
     Camera is opened and released here — the voice loop never holds the
     handle, so there's no contention with anything else on the device.
@@ -235,11 +294,12 @@ def identify_species(classifier: TFLiteClassifierTTA,
             cv2.imwrite(str(raw_path), frame)
             print(f"  saved raw frame: {raw_path}")
 
-        # TTA-averaged predictions, already temperature-scaled.
+        # TTA-averaged, temperature-scaled predictions with the manifest's
+        # acceptance policy (negative classes, id_threshold) applied.
         t0 = time.perf_counter()
-        preds = classifier.predict(frame)
+        ident = classifier.identify(frame, threshold=conf_threshold)
         t_infer = time.perf_counter() - t0
-        top_label, top_conf = preds[0]
+        preds = ident.top
 
         # Per-stage timing — tells you exactly where the time went on
         # the FIRST identification (where TFLite warmup also lands if
@@ -262,20 +322,18 @@ def identify_species(classifier: TFLiteClassifierTTA,
             cv2.imwrite(str(ann_path), annotated)
             print(f"  saved annotated frame: {ann_path}")
 
-        if top_label in NON_SPECIES_LABELS:
-            return None, top_conf, ("I do not see any animals right now. "
-                                    "Point me at something and try again.")
+        if not ident.accepted:
+            return None, ident.confidence, REFUSAL_MESSAGES[ident.reason]
 
-        if top_conf < conf_threshold:
-            return None, top_conf, ("I am not sure what I see. "
-                                    "Try moving closer or pointing me "
-                                    "more directly at the animal.")
-
-        # Replace underscores so the spoken confirmation reads naturally.
-        # The species_id passed to the pipeline keeps the underscored form.
-        spoken = top_label.replace("_", " ")
-        msg = f"I see a {spoken}. Press the button to ask me questions."
-        return top_label, top_conf, msg
+        # Announce the common name when the corpus has one; otherwise drop
+        # the underscores so the scientific name reads naturally. The
+        # species_id passed to the pipeline keeps the underscored form.
+        spoken = ((common_names or {}).get(ident.label)
+                  or ident.label.replace("_", " "))
+        article = "an" if spoken[:1].lower() in "aeiou" else "a"
+        msg = (f"I see {article} {spoken}. "
+               f"Press the button to ask me questions.")
+        return ident.label, ident.confidence, msg
 
     finally:
         cap.release()
@@ -318,13 +376,28 @@ def record_utterance() -> np.ndarray:
     return np.concatenate(chunks, axis=0).flatten()
 
 
-def transcribe(model: WhisperModel, audio: np.ndarray) -> str:
+def audio_ctx_for(n_samples: int, min_ctx: int) -> int:
+    """
+    Encoder context that covers a clip of n_samples: 50 per second plus a
+    margin, at least min_ctx, at most the full window. min_ctx <= 0 means
+    whisper's default (0, the full 30 s window).
+    """
+    if min_ctx <= 0:
+        return 0
+    need = math.ceil(n_samples / SAMPLE_RATE * AUDIO_CTX_PER_SEC) + AUDIO_CTX_PAD
+    return min(AUDIO_CTX_MAX, max(min_ctx, need))
+
+
+def transcribe(model: WhisperModel, audio: np.ndarray,
+               min_audio_ctx: int = 0) -> str:
     """
     Run whisper.cpp on an int16 mono array. pywhispercpp wants float32 in
-    [-1, 1], so convert. Returns the joined transcript, stripped.
+    [-1, 1], so convert. The encoder window is sized to the clip (see
+    audio_ctx_for). Returns the joined transcript, stripped.
     """
     audio_f32 = audio.astype(np.float32) / 32768.0
-    segments = model.transcribe(audio_f32)
+    segments = model.transcribe(
+        audio_f32, audio_ctx=audio_ctx_for(len(audio), min_audio_ctx))
     return " ".join(seg.text for seg in segments).strip()
 
 
@@ -332,62 +405,288 @@ def transcribe(model: WhisperModel, audio: np.ndarray) -> str:
 # TTS — speech out
 # ---------------------------------------------------------------------------
 
-def speak(voice: PiperVoice, text: str) -> None:
-    """
-    Synthesize `text` with a pre-loaded PiperVoice and play it through the
-    system default output device.
+# Silence in front of every clip. Each clip is played by a fresh player
+# call, and an output device that has just been opened can swallow the first
+# syllable; this replaces the old `"-" + text` workaround.
+LEAD_SILENCE_SEC = 0.12
 
-    Synthesizes to a temp WAV then plays it. This is the simple, blocking
-    version. Two known future improvements, both deliberately deferred:
-      - sentence-level streaming: split text on '. ', synth+play sentence
-        one while sentence two synthesizes. Cuts time-to-first-audio.
-      - interruptibility: if the button is pressed during playback, kill
-        the player subprocess and start recording. The player call below
-        is already a subprocess specifically so this is a clean add later.
+# Spoken as soon as a question goes to the LLM (the slow path), so the
+# visitor knows the robot is working. Rendered while the synth thread is
+# idle at startup, so playing one costs no CPU during the LLM's prompt
+# processing; rotated so repeat questions don't hear the same line.
+FILLER_PHRASES = (
+    "Gathering all the information...",
+    "Let me check my field notes.",
+    "Good question. One moment.",
+)
+
+
+def piper_session(model_path: Path, threads: int):
     """
-    fd, tmp = tempfile.mkstemp(suffix=".wav", prefix="roboranger_")
-    os.close(fd)
-    tmp_path = Path(tmp)
-    try:
-        with wave.open(str(tmp_path), "wb") as wav_file:
-            voice.synthesize_wav(text, wav_file)
-        _play_wav(tmp_path)
-    finally:
-        tmp_path.unlink(missing_ok=True)
+    An onnxruntime session for a Piper voice: `threads` intra-op threads
+    (0 = onnxruntime's default, one per core), and no spin-waiting between
+    ops, so idle workers don't burn cores other work could use.
+    """
+    import onnxruntime
+
+    opts = onnxruntime.SessionOptions()
+    if threads > 0:
+        opts.intra_op_num_threads = threads
+    opts.inter_op_num_threads = 1
+    opts.add_session_config_entry("session.intra_op.allow_spinning", "0")
+    return onnxruntime.InferenceSession(
+        str(model_path), sess_options=opts,
+        providers=["CPUExecutionProvider"])
+
+
+def load_piper_voice(model_path: Path, threads: int) -> PiperVoice:
+    """
+    PiperVoice.load() with its session from piper_session(threads).
+
+    piper builds the session with default options: one worker per core,
+    spin-waiting between ops. While an answer streams, synthesis then
+    competes with llama-server for the same four cores, and llama.cpp
+    stalls whenever one of its threads loses its core. Rebuilding the
+    session after load() would load the model twice (as long as the whole
+    load), so this mirrors load() for piper-tts 1.4 instead.
+    """
+    from piper.config import PiperConfig
+
+    with open(f"{model_path}.json", "r", encoding="utf-8") as fh:
+        config = PiperConfig.from_dict(json.load(fh))
+    espeak_dir = inspect.signature(PiperVoice.load).parameters[
+        "espeak_data_dir"].default
+    return PiperVoice(
+        config=config,
+        session=piper_session(model_path, threads),
+        espeak_data_dir=Path(espeak_dir),
+        download_dir=Path.cwd(),
+    )
+
+
+class Speaker:
+    """
+    Non-blocking text-to-speech. say() queues text and returns at once. A
+    synth thread turns each item into a WAV and a player thread plays them
+    in order, so sentence N+1 is synthesized while sentence N plays; the
+    voice loop hands over sentences while the LLM is still generating.
+
+    Two onnxruntime sessions, picked per sentence: the voice's own (few
+    threads) while the LLM is generating, so synthesis leaves llama-server
+    its cores, and an all-core one (set_idle_session) the rest of the time:
+    the announcement, answers from the blurb, and whatever is left to say
+    once generation ends. One thread alone synthesizes no faster than real
+    time on the UNO Q.
+
+    Only the synth thread touches the PiperVoice. Per-turn timings are
+    measured from the reset_turn() timestamp (button-up).
+    """
+
+    def __init__(self, voice: PiperVoice) -> None:
+        self.voice = voice
+        self._busy_session = voice.session
+        self._idle_session = None
+        self._llm_generating = threading.Event()
+        self._synth_q: "queue.Queue[tuple[str, str]]" = queue.Queue()
+        self._play_q: "queue.Queue[tuple[Path, str, bool]]" = queue.Queue()
+        self._dir = Path(tempfile.mkdtemp(prefix="roboranger_tts_"))
+        atexit.register(shutil.rmtree, self._dir, ignore_errors=True)
+        self._clip_n = 0
+        # Filler state belongs to the synth thread, except _next_filler
+        # (main thread only).
+        self._filler_wavs: dict[str, list[Path]] = {}
+        self._unrendered = list(FILLER_PHRASES)
+        self._next_filler = 0
+        self.reset_turn(time.perf_counter())
+        threading.Thread(target=self._synth_loop, name="tts-synth",
+                         daemon=True).start()
+        threading.Thread(target=self._play_loop, name="tts-play",
+                         daemon=True).start()
+
+    # -- public, main thread ---------------------------------------------
+
+    def say(self, text: str) -> None:
+        """Queue text to be spoken after everything already queued."""
+        text = text.strip()
+        if text:
+            self._synth_q.put(("text", text))
+
+    def say_and_wait(self, text: str) -> None:
+        self.say(text)
+        self.wait()
+
+    def set_idle_session(self, session) -> None:
+        """Synthesize with `session` whenever the LLM isn't generating, from
+        the next sentence on. Safe from any thread (loaded in the
+        background at startup)."""
+        self._idle_session = session
+
+    @property
+    def has_idle_session(self) -> bool:
+        return self._idle_session is not None
+
+    def llm_started(self) -> None:
+        """answer()'s on_llm_start: switch to the few-thread session, since
+        llama-server is about to take its cores, and play the filler line."""
+        self._llm_generating.set()
+        self.play_filler()
+
+    def llm_finished(self) -> None:
+        """Generation is over: the rest of the answer can use every core."""
+        self._llm_generating.clear()
+
+    def play_filler(self) -> None:
+        """Queue the next filler line (see FILLER_PHRASES)."""
+        phrase = FILLER_PHRASES[self._next_filler % len(FILLER_PHRASES)]
+        self._next_filler += 1
+        self._synth_q.put(("filler", phrase))
+
+    def wait(self) -> None:
+        """Block until everything queued has been synthesized and played."""
+        self._synth_q.join()   # items reach _play_q before task_done()
+        self._play_q.join()
+
+    def reset_turn(self, t0: float) -> None:
+        """Start a new turn's timings; call while idle, at button-up."""
+        self._t0 = t0
+        self._first_audio: float | None = None
+        self._first_answer: float | None = None
+        self._synth_s = 0.0
+
+    def turn_timings(self) -> dict[str, float]:
+        """first_audio (filler included), first_answer, tts_synth — seconds,
+        the first two relative to reset_turn()'s timestamp."""
+        out = {"tts_synth": self._synth_s}
+        if self._first_audio is not None:
+            out["first_audio"] = self._first_audio - self._t0
+        if self._first_answer is not None:
+            out["first_answer"] = self._first_answer - self._t0
+        return out
+
+    # -- worker threads --------------------------------------------------
+
+    def _synthesize(self, text: str) -> Iterator[Path]:
+        """
+        One WAV per sentence, each yielded as soon as it is synthesized:
+        piper splits the text into sentences itself, so a long blurb answer
+        starts playing after its first sentence instead of after all of it.
+        piper runs its session once per sentence as the generator advances,
+        so the session is picked again before each one.
+        """
+        chunks = iter(self.voice.synthesize(text))
+        while True:
+            idle = self._idle_session
+            self.voice.session = (idle if idle is not None
+                                  and not self._llm_generating.is_set()
+                                  else self._busy_session)
+            chunk = next(chunks, None)
+            if chunk is None:
+                return
+            self._clip_n += 1
+            path = self._dir / f"clip_{self._clip_n}.wav"
+            with wave.open(str(path), "wb") as wav_file:
+                wav_file.setframerate(chunk.sample_rate)
+                wav_file.setsampwidth(chunk.sample_width)
+                wav_file.setnchannels(chunk.sample_channels)
+                lead = int(chunk.sample_rate * LEAD_SILENCE_SEC)
+                wav_file.writeframes(bytes(lead * chunk.sample_width
+                                           * chunk.sample_channels))
+                wav_file.writeframes(chunk.audio_int16_bytes)
+            yield path
+
+    def _synth_loop(self) -> None:
+        while True:
+            try:
+                # While idle, render the filler lines one at a time; real
+                # speech never waits behind more than one of them.
+                kind, text = self._synth_q.get(
+                    timeout=0.25 if self._unrendered else None)
+            except queue.Empty:
+                phrase = self._unrendered.pop(0)
+                try:
+                    self._filler_wavs[phrase] = list(self._synthesize(phrase))
+                except Exception as e:
+                    print(f"  [tts: filler failed: {e!r}]", file=sys.stderr)
+                continue
+            try:
+                if kind == "filler":
+                    if text not in self._filler_wavs:
+                        self._filler_wavs[text] = list(self._synthesize(text))
+                        if text in self._unrendered:
+                            self._unrendered.remove(text)
+                    for path in self._filler_wavs[text]:
+                        self._play_q.put((path, kind, False))
+                else:
+                    t = time.perf_counter()
+                    for path in self._synthesize(text):
+                        self._synth_s += time.perf_counter() - t
+                        self._play_q.put((path, kind, True))
+                        t = time.perf_counter()
+            except Exception as e:
+                print(f"  [tts: synthesis failed: {e!r}]", file=sys.stderr)
+            finally:
+                self._synth_q.task_done()
+
+    def _play_loop(self) -> None:
+        while True:
+            path, kind, delete = self._play_q.get()
+            try:
+                now = time.perf_counter()
+                if self._first_audio is None:
+                    self._first_audio = now
+                if kind == "text" and self._first_answer is None:
+                    self._first_answer = now
+                _play_wav(path)
+            except Exception as e:
+                print(f"  [tts: playback failed: {e!r}]", file=sys.stderr)
+            finally:
+                if delete:
+                    path.unlink(missing_ok=True)
+                self._play_q.task_done()
+
+
+# Resolved once: the first playback finds the player, later ones reuse it.
+_PLAYER_CMD: list[str] | None = None
 
 
 def _play_wav(path: Path) -> None:
-    """Play a WAV synchronously. Tries common players per platform."""
+    """Play a WAV synchronously with the platform's player."""
+    global _PLAYER_CMD
     if sys.platform == "win32":
-        path_str = str(path.resolve()).replace("'", "''")
-        ps = (f"$p = New-Object Media.SoundPlayer '{path_str}'; "
-              f"$p.PlaySync()")
-        subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                       check=False, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL)
+        import winsound  # stdlib, Windows only; no subprocess per clip
+        winsound.PlaySound(str(path), winsound.SND_FILENAME)
         return
-    candidates = [["aplay", "-q"], ["paplay"], ["afplay"]]
-    for cmd in candidates:
-        if subprocess.run(["which", cmd[0]],
-                          capture_output=True).returncode == 0:
-            subprocess.run(cmd + [str(path)], check=False,
-                           stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL)
-            return
-    print(f"  [no audio player found — wav at {path}]", file=sys.stderr)
+    if _PLAYER_CMD is None:
+        _PLAYER_CMD = next((cmd for cmd in (["aplay", "-q"], ["paplay"],
+                                            ["afplay"])
+                            if shutil.which(cmd[0])), [])
+    if not _PLAYER_CMD:
+        print(f"  [no audio player found — skipped {path.name}]",
+              file=sys.stderr)
+        return
+    subprocess.run(_PLAYER_CMD + [str(path)], check=False,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # ---------------------------------------------------------------------------
 # Latency table — same shape as run_pipeline.py, plus stt/tts rows
 # ---------------------------------------------------------------------------
 
-# pipeline stages, in run order, bracketed by the two audio stages this
-# loop adds. "total_voice" is button-up to end-of-speech: the number a
-# visitor actually feels.
+# Everything is measured from button-up (end of recording), so the time the
+# visitor spends waiting to press the button or talking isn't counted:
+#   stt                 button-up -> transcript (incl. a first-turn wait
+#                       for Whisper to finish loading)
+#   gate .. llm         pipeline stages; llm_first_sentence is when the
+#                       streamed answer's first full sentence arrived
+#   first_audio         button-up -> first sound (often the filler line)
+#   first_answer        button-up -> first sentence of the answer playing
+#   tts_synth           total piper synthesis time (overlaps playback)
+#   total_voice         button-up -> end of speech
 VOICE_STAGE_ORDER = (
     "stt",
-    "gate", "blurb", "intent", "format", "retrieval", "prompt", "llm",
-    "tts",
+    "gate", "blurb", "intent", "format", "retrieval", "prompt",
+    "llm_first_sentence", "llm",
+    "first_audio", "first_answer", "tts_synth",
     "total_voice",
 )
 
@@ -396,12 +695,12 @@ def fmt_ms(seconds: float | None) -> str:
     return "      —" if seconds is None else f"{seconds * 1000:7.1f}ms"
 
 
-def print_turn(resp: Response, stt_s: float, tts_s: float,
-               total_voice_s: float, transcript: str) -> None:
+def print_turn(resp: Response, transcript: str, *, stt_s: float,
+               audio: dict[str, float], total_voice_s: float) -> None:
     """Print transcript, answer, and the full voice-inclusive latency table."""
     merged: dict[str, float] = dict(resp.latency)
+    merged.update(audio)
     merged["stt"] = stt_s
-    merged["tts"] = tts_s
     merged["total_voice"] = total_voice_s
 
     print()
@@ -417,7 +716,7 @@ def print_turn(resp: Response, stt_s: float, tts_s: float,
     print("  latency:")
     for stage in VOICE_STAGE_ORDER:
         marker = "  └─" if stage == "total_voice" else "  │ "
-        print(f"  {marker} {stage:12s} {fmt_ms(merged.get(stage))}")
+        print(f"  {marker} {stage:18s} {fmt_ms(merged.get(stage))}")
     print()
 
 
@@ -425,8 +724,157 @@ def print_turn(resp: Response, stt_s: float, tts_s: float,
 # The loop
 # ---------------------------------------------------------------------------
 
-def voice_repl(pipeline: RoboRangerPipeline, species_id: str,
-               whisper_model: WhisperModel, voice: PiperVoice) -> int:
+class Session:
+    """
+    What the voice loop needs that may still be loading when it starts:
+    the Whisper model and the pipeline. Each is waited for only when a turn
+    actually needs it, so the visitor can press the button and talk while
+    they finish loading.
+
+    pipeline() and transcribe() are main-thread only: the pipeline's sqlite
+    connection is bound to the thread that builds it. The species warmup
+    builds a pipeline of its own on its own thread. Background threads
+    report through note(), and the loop prints those lines between turns so
+    they don't land in the middle of the push-to-talk prompt.
+    """
+
+    def __init__(self, *, speaker: Speaker,
+                 whisper_thread: threading.Thread,
+                 prewarm_thread: threading.Thread,
+                 background: dict, background_errors: dict,
+                 build_kwargs: dict, min_audio_ctx: int) -> None:
+        self._speaker = speaker
+        self._whisper_thread = whisper_thread
+        self._prewarm_thread = prewarm_thread
+        self._background = background
+        self._errors = background_errors
+        self._build_kwargs = build_kwargs
+        self._min_audio_ctx = min_audio_ctx
+        self._pipeline: RoboRangerPipeline | None = None
+        self._notes: "queue.Queue[str]" = queue.Queue()
+        # Set by the voice loop at the first button-up; the species warmup
+        # stands down once a real question is on its way.
+        self.question_started = threading.Event()
+
+    def note(self, line: str) -> None:
+        """Queue a log line from any thread; printed at the next turn."""
+        self._notes.put(line)
+
+    def print_notes(self) -> None:
+        while not self._notes.empty():
+            print(self._notes.get_nowait(), file=sys.stderr)
+
+    def transcribe(self, audio: np.ndarray) -> str:
+        """Transcribe with Whisper, waiting for it to load if necessary."""
+        if self._whisper_thread.is_alive():
+            print("  waiting for whisper to finish loading...", flush=True)
+        self._whisper_thread.join()
+        if "whisper" in self._errors:
+            raise self._errors["whisper"]
+        if "whisper_load_s" in self._background:  # first call only
+            print(f"  whisper loaded in "
+                  f"{self._background.pop('whisper_load_s'):.1f}s, warmed in "
+                  f"{self._background.pop('whisper_warm_s', 0.0):.1f}s")
+        return transcribe(self._background["whisper"], audio,
+                          self._min_audio_ctx)
+
+    def start_species_warmup(self, species_id: str,
+                             on_done: Callable[[dict], None]) -> None:
+        """
+        Prefill the LLM with this species' prompt as soon as the prewarmed
+        components exist, however long that takes relative to
+        identification, so the first question finds the system prompt and
+        SPECIES FACTS already in llama-server's cache. Runs on its own
+        `llm-warm` thread with its own corpus connection (sqlite3
+        connections are bound to the thread that creates them), so neither
+        the main thread nor this thread ever waits for the other.
+
+        Stands down once a question has started: that question does the same
+        prefill, and a duplicate request would only queue in front of it on
+        the model server. on_done(warm) runs on the thread with the timings.
+        """
+        threading.Thread(target=self._warm_species, args=(species_id, on_done),
+                         name="llm-warm", daemon=True).start()
+
+    def _warm_species(self, species_id: str,
+                      on_done: Callable[[dict], None]) -> None:
+        warm: dict = {}
+        t0 = time.perf_counter()
+        try:
+            self._prewarm_thread.join()
+            components = self._background.get("components")
+            if components is None:
+                warm["skipped"] = "pipeline components failed to load"
+            elif self.question_started.is_set():
+                warm["skipped"] = "a question started first"
+            else:
+                pipeline = build_pipeline(**self._build_kwargs,
+                                          components=components)
+                try:
+                    messages, warm = pipeline.warmup_prompt(species_id)
+                    if messages is None:
+                        pass  # warm["error"] says why
+                    elif self.question_started.is_set():
+                        warm["skipped"] = "a question started first"
+                    else:
+                        t = time.perf_counter()
+                        error = pipeline.warm_llm(messages)
+                        warm["llm"] = time.perf_counter() - t
+                        if error:
+                            warm["error"] = error
+                finally:
+                    pipeline.db_conn.close()
+        except Exception as e:
+            warm["error"] = f"{type(e).__name__}: {e}"
+
+        if "error" in warm:
+            self.note(f"warn: species warmup: {warm['error']}")
+        elif "skipped" in warm:
+            self.note(f"  species warmup skipped: {warm['skipped']}")
+        else:
+            self.note(f"  species warmup done "
+                      f"{time.perf_counter() - t0:.1f}s after identification ("
+                      + ", ".join(f"{k}={v * 1000:.0f}ms"
+                                  for k, v in warm.items()
+                                  if isinstance(v, float)) + ")")
+        on_done(warm)
+
+    def pipeline(self) -> RoboRangerPipeline:
+        """The pipeline, built on first use from the prewarmed components
+        (joining the prewarm thread first if it is still running)."""
+        if self._pipeline is not None:
+            return self._pipeline
+        if self._prewarm_thread.is_alive():
+            print("waiting for pipeline components...", flush=True)
+            self._speaker.say("One moment while I get ready.")
+        t = time.perf_counter()
+        self._prewarm_thread.join()
+        components = self._background.get("components")
+        if "components" in self._errors:
+            print(f"warn: background prewarm failed "
+                  f"({self._errors['components']!r}); loading inline",
+                  file=sys.stderr)
+            components = None
+        else:
+            timings = getattr(components, "timings", None) or {}
+            print(f"  components ready in "
+                  f"{self._background['components_s']:.1f}s "
+                  f"(foreground wait {time.perf_counter() - t:.1f}s): "
+                  + ", ".join(f"{k}={v:.1f}s" for k, v in timings.items()
+                              if isinstance(v, float)))
+            if timings.get("llm_error"):
+                print(f"warn: LLM prewarm: {timings['llm_error']}",
+                      file=sys.stderr)
+
+        print("building pipeline...", end=" ", flush=True)
+        t = time.perf_counter()
+        self._pipeline = build_pipeline(**self._build_kwargs,
+                                        components=components)
+        print(f"({(time.perf_counter() - t) * 1000:.0f}ms)")
+        return self._pipeline
+
+
+def voice_repl(session: Session, species_id: str, speaker: Speaker) -> int:
     """
     Push-to-talk loop. One iteration = one utterance = one spoken answer.
     Ctrl-C to exit.
@@ -435,19 +883,29 @@ def voice_repl(pipeline: RoboRangerPipeline, species_id: str,
     via --species). To re-identify, restart the script.
     """
     print(f"\nvoice loop ready — species: {species_id}")
+    if not speaker.has_idle_session:
+        print("(all-core Piper session not loaded yet or disabled; "
+              "synthesis uses the few-thread one)")
     print("Ctrl-C to exit.\n")
 
-    print_total_rss(label="after warmup")
+    print_total_rss(label="voice loop start")
 
     while True:
         try:
+            # Don't open the mic while the robot is still talking, or the
+            # recording starts with its own voice.
+            speaker.wait()
+            session.print_notes()
+
             # --- STT: speech in -------------------------------------------
-            t_stt = time.perf_counter()
             audio = record_utterance()
+            t_up = time.perf_counter()  # button-up: every turn timing's zero
+            session.question_started.set()
+            speaker.reset_turn(t_up)
             transcript = ""
             if len(audio) >= SAMPLE_RATE * MIN_UTTERANCE_SEC:
-                transcript = transcribe(whisper_model, audio)
-            stt_s = time.perf_counter() - t_stt
+                transcript = session.transcribe(audio)
+            stt_s = time.perf_counter() - t_up
 
             # Empty / too-short / whisper-returned-nothing: don't run the
             # pipeline on garbage. Speak a short reprompt and loop. This is
@@ -455,25 +913,109 @@ def voice_repl(pipeline: RoboRangerPipeline, species_id: str,
             # the device never just goes silent.
             if not transcript:
                 print("  (nothing heard)")
-                speak(voice, "I didn't catch that. Press the button and "
-                             "try again.")
+                speaker.say("I didn't catch that. Press the button and "
+                            "try again.")
                 continue
 
-            # --- pipeline core: UNCHANGED ---------------------------------
-            # answer() does its own per-stage timing into resp.latency.
-            resp = pipeline.answer(species_id, transcript)
+            # --- pipeline core --------------------------------------------
+            # answer() does its own per-stage timing into resp.latency. On
+            # the LLM path it cues the filler line, then hands over each
+            # sentence as it is generated so speech starts before the
+            # answer is finished.
+            try:
+                resp = session.pipeline().answer(
+                    species_id, transcript,
+                    on_llm_start=speaker.llm_started,
+                    on_sentence=speaker.say)
+            finally:
+                speaker.llm_finished()
 
             # --- TTS: speech out ------------------------------------------
-            t_tts = time.perf_counter()
-            speak(voice, "-" + resp.text)
-            tts_s = time.perf_counter() - t_tts
+            if not resp.streamed:
+                speaker.say(resp.text)
+            speaker.wait()
+            print_turn(resp, transcript, stt_s=stt_s,
+                       audio=speaker.turn_timings(),
+                       total_voice_s=time.perf_counter() - t_up)
 
-            total_voice_s = stt_s + resp.latency.get("total", 0.0) + tts_s
-            print_turn(resp, stt_s, tts_s, total_voice_s, transcript)
-
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
+            # EOFError: stdin closed (piped input, systemd, ssh without a
+            # tty). Exit as cleanly as Ctrl-C rather than tracebacking out
+            # of the push-to-talk prompt.
             print("\nbye")
             return 0
+
+
+# ---------------------------------------------------------------------------
+# Startup checks + device status
+# ---------------------------------------------------------------------------
+
+def corpus_preflight(db_path: Path) -> tuple[dict, dict[str, str]]:
+    """
+    Check corpus.db before any camera/voice work: it must exist, be schema
+    v2 (species-partitioned vectors), and match the runtime embedder.
+    Returns (corpus_meta, {species_id: common_name}) for every species with
+    a blurb. Raises CorpusSchemaError or FileNotFoundError with an
+    actionable message.
+    """
+    if not db_path.is_file():
+        # sqlite3.connect() would silently create an empty file here.
+        raise FileNotFoundError(f"corpus not found: {db_path}")
+    conn = open_db(db_path)
+    try:
+        meta = check_corpus_schema(conn)
+        species = [r[0] for r in conn.execute(
+            "SELECT species_id FROM species WHERE blurb_json IS NOT NULL")]
+        names = {sid: _get_common_name(conn, sid) for sid in species}
+    finally:
+        conn.close()
+    return meta, names
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def write_device_status(path: Path, *, db_path: Path, corpus_meta: dict,
+                        classifier: TFLiteClassifierTTA | None,
+                        species_id: str, warmup: dict,
+                        kernels: str | None = None) -> None:
+    """
+    Record exactly which corpus and model this unit is running — the thing a
+    device would report upstream for OTA bookkeeping (see "OTA corpus
+    updates" in onDeviceAgentREADME.md).
+    """
+    model = None
+    if classifier is not None:
+        m = classifier.manifest
+        model = {
+            "dir": str(m.path.parent) if m.path else None,
+            "arch": m.arch,
+            "tflite_sha256": _sha256(m.model_path),
+            "input_range": m.input_range,
+            "temperature": m.temperature,
+            "id_threshold": m.id_threshold,
+            "evaluated_at": m.eval.get("evaluated_at"),
+            "kernels": kernels,
+        }
+    status = {
+        "written_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "host": platform.node(),
+        "corpus": {
+            "path": str(db_path),
+            **{k: corpus_meta.get(k) for k in (
+                "schema_version", "corpus_version", "content_sha256",
+                "species_count", "chunk_count", "sqlite_vec_version",
+                "embed_model", "built_at")},
+        },
+        "model": model,
+        "session": {"species_id": species_id, "warmup": warmup},
+    }
+    path.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -488,7 +1030,7 @@ def main() -> int:
     # Pipeline args — kept identical to run_pipeline.py so muscle memory
     # transfers and the two scripts can share command lines.
     p.add_argument("--db",
-                   default="species_identification/offline-info/corpus.db",
+                   default=str(_ROOT / "species_identification/offline-info/corpus.db"),
                    help="path to corpus.db")
     p.add_argument("--backend", choices=("ollama", "llama-cpp"),
                    default="ollama",
@@ -505,28 +1047,52 @@ def main() -> int:
     p.add_argument("--species", default=None,
                    help="override species_id; if omitted, identify from camera")
     # Audio args.
-    p.add_argument("--voice", type=Path, required=True,
-                   help="path to piper voice .onnx (+ .onnx.json sibling)")
-    p.add_argument("--whisper-model", type=Path, required=True,
+    # Required unless --camera-test (checked after parsing, so the camera
+    # check can run without any model files).
+    p.add_argument("--voice", type=Path, default=None,
+                   help="path to piper voice .onnx (+ .onnx.json sibling); "
+                        "required unless --camera-test")
+    p.add_argument("--whisper-model", type=Path, default=None,
                    help="path to whisper.cpp ggml model "
-                        "(ggml-tiny.en-q5_1.bin recommended)")
+                        "(ggml-tiny.en-q5_1.bin recommended); "
+                        "required unless --camera-test")
     p.add_argument("--whisper-threads", type=int, default=4,
                    help="threads for whisper.cpp (default: 4)")
-    # Vision args — new.
-    p.add_argument("--tflite-model", type=Path,
-                   default=Path("species_identification/outputs/model_int8.tflite"),
-                   help="path to int8 TFLite classifier")
-    p.add_argument("--class-names", type=Path,
-                   default=Path("species_identification/outputs/class_names.json"),
-                   help="path to class_names.json")
-    p.add_argument("--temperature-file", type=Path,
-                   default=Path("species_identification/outputs/temperature.json"),
-                   help="path to temperature.json (optional, T=1.0 if missing)")
+    p.add_argument("--whisper-audio-ctx", type=int,
+                   default=DEFAULT_MIN_AUDIO_CTX,
+                   help="smallest whisper.cpp encoder context; each clip "
+                        "gets 50 per second of audio + a margin, at least "
+                        f"this (default: {DEFAULT_MIN_AUDIO_CTX}, ~5 s). "
+                        "0 = whisper's full 30 s window for every clip")
+    p.add_argument("--tts-threads", type=int, default=1,
+                   help="onnxruntime threads for Piper while the LLM is "
+                        "generating (default: 1, so speaking an answer "
+                        "doesn't take cores from llama-server; 0 = every "
+                        "core)")
+    p.add_argument("--tts-idle-threads", type=int, default=0,
+                   help="Piper threads the rest of the time: the "
+                        "announcement, answers from the blurb, and speech "
+                        "left once generation ends (default: 0 = every "
+                        "core). A second session, loaded in the "
+                        "background; it holds another copy of the voice in "
+                        "memory. Equal to --tts-threads = one session")
+    # Vision args.
+    p.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL_DIR,
+                   help="directory with model_*.tflite + "
+                        "model_manifest.json (default: outputs/deploy)")
     p.add_argument("--camera-index", type=int, default=0,
                    help="V4L2 camera index (default: 0)")
-    p.add_argument("--id-threshold", type=float, default=ID_CONF_THRESHOLD,
-                   help=f"min confidence to accept ID "
-                        f"(default: {ID_CONF_THRESHOLD})")
+    p.add_argument("--id-threshold", type=float, default=None,
+                   help="override the manifest's min confidence to accept "
+                        "an identification")
+    p.add_argument("--kernels", choices=("ref", "default"), default="default",
+                   help="LiteRT kernels: default uses XNNPACK (14-43x faster "
+                        "on the UNO Q); ref disables it, for debugging a "
+                        "suspected delegate problem. Compare with "
+                        "species_identification/tests/bench_device.py")
+    p.add_argument("--status-file", type=Path,
+                   default=Path("device_status.json"),
+                   help="where to record the running corpus/model versions")
     # Debug / diagnostic flags.
     p.add_argument("--save-id-frames", type=Path, default=None,
                    help="if set, save raw + annotated capture frame here "
@@ -579,6 +1145,12 @@ def main() -> int:
             cap.release()
 
     # Fail fast on missing files before loading anything heavy.
+    missing = [flag for flag, value in (("--voice", args.voice),
+                                        ("--whisper-model", args.whisper_model))
+               if value is None]
+    if missing:
+        p.error(f"the following arguments are required: {', '.join(missing)} "
+                f"(only --camera-test runs without them)")
     if not args.voice.exists():
         print(f"error: voice file {args.voice} not found", file=sys.stderr)
         return 1
@@ -590,86 +1162,149 @@ def main() -> int:
     # Load piper FIRST — we need to speak failure messages from the
     # classifier or pipeline build. Whisper comes after, since it's
     # only needed once the loop starts.
-    print("loading piper voice...", end=" ", flush=True)
+    print(f"loading piper voice ({args.tts_threads or 'all'} "
+          f"thread{'s' if args.tts_threads != 1 else ''} while the LLM "
+          f"generates)...", end=" ", flush=True)
     t = time.perf_counter()
     try:
-        voice = PiperVoice.load(str(args.voice))
+        voice = load_piper_voice(args.voice, args.tts_threads)
     except Exception as e:
         print()
         print(f"error: failed to load voice {args.voice}: {e}",
               file=sys.stderr)
         return 1
     print(f"({time.perf_counter() - t:.1f}s)")
+    # All speech goes through the Speaker's threads from here on. While it
+    # is idle it pre-renders the filler lines.
+    speaker = Speaker(voice)
+
+    # The all-core session for when the LLM isn't generating loads in the
+    # background; until it's ready, the few-thread session does everything.
+    if args.tts_idle_threads != args.tts_threads:
+        def _load_idle_tts_bg():
+            try:
+                speaker.set_idle_session(
+                    piper_session(args.voice, args.tts_idle_threads))
+            except Exception as e:
+                print(f"warn: all-core Piper session failed to load ({e!r}); "
+                      f"synthesizing with {args.tts_threads} thread(s)",
+                      file=sys.stderr)
+
+        threading.Thread(target=_load_idle_tts_bg, name="tts-load",
+                         daemon=True).start()
+
+    # --- Corpus preflight --------------------------------------------------
+    # Seconds-cheap, and a stale (v1) or missing corpus would otherwise only
+    # surface after the camera flow, when the pipeline is built.
+    db_path = Path(args.db)
+    try:
+        corpus_meta, common_names = corpus_preflight(db_path)
+    except (CorpusSchemaError, FileNotFoundError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        speaker.say_and_wait("My knowledge base is missing or out of date. "
+                             "Please check the setup.")
+        return 1
+    print(f"corpus {db_path}: version {corpus_meta.get('corpus_version')} "
+          f"({corpus_meta.get('species_count')} species, "
+          f"sha {str(corpus_meta.get('content_sha256'))[:12]})")
 
     # --- Species ID stage --------------------------------------------------
     # Two paths: --species override (laptop dev, no camera) OR identify
-    # from a single camera frame. Failure here speaks an apology and
-    # exits — the loop won't start with an unknown species.
+    # from a single camera frame. A failed identification speaks why and
+    # waits for another try — the loop won't start with an unknown species.
     #
-    # Performance note: while the user is pointing the camera and we're
-    # running the classifier (~1-2s), the pipeline + whisper builds run on
-    # background threads. They almost always finish before identification
-    # does, hiding several seconds of latency behind work the user is
-    # already waiting for. The threads write into a shared dict and we
-    # join them right before entering the voice loop.
-    import threading
-
+    # Performance note: aiming the camera and classifying one frame takes
+    # several seconds of the visitor's time, so everything that doesn't need
+    # the species loads on background threads meanwhile:
+    #
+    #   whisper-load      the STT model
+    #   pipeline-prewarm  sentence-transformer, gate + intent centroids, and
+    #                     a 1-token LLM request that makes the model server
+    #                     load its weights and cache the system prompt
+    #
+    # Only the corpus connection is left for the main thread (sqlite3
+    # connections are bound to the thread that creates them), and that part
+    # is milliseconds. The threads write into a shared dict; neither is
+    # joined until a question needs it (see Session).
     background: dict[str, object] = {}
     background_errors: dict[str, BaseException] = {}
 
     def _load_whisper_bg():
         try:
             t = time.perf_counter()
-            background["whisper"] = WhisperModel(
-                str(args.whisper_model), n_threads=args.whisper_threads)
+            # print_progress=False silences whisper.cpp's "Progress: 0%"
+            # lines on every transcription.
+            model = WhisperModel(str(args.whisper_model),
+                                 n_threads=args.whisper_threads,
+                                 print_progress=False)
             background["whisper_load_s"] = time.perf_counter() - t
+            # The first transcription after a load is the slow one
+            # (bench_stt.py reports it as "first"); pay it here, on a second
+            # of silence, instead of on the visitor's first question.
+            t = time.perf_counter()
+            transcribe(model, np.zeros(SAMPLE_RATE, dtype=np.int16),
+                       args.whisper_audio_ctx)
+            background["whisper_warm_s"] = time.perf_counter() - t
+            background["whisper"] = model
         except BaseException as e:
             background_errors["whisper"] = e
 
-    # Kick off whisper load only — pipeline build has thread-bound sqlite
-    # connections, so we have to build it on the main thread.
-    print("loading whisper in background...", flush=True)
+    def _prewarm_pipeline_bg():
+        try:
+            t = time.perf_counter()
+            background["components"] = prewarm_components(
+                backend=args.backend, model=args.model,
+                backend_host=args.backend_host)
+            background["components_s"] = time.perf_counter() - t
+        except BaseException as e:
+            background_errors["components"] = e
+
+    print(f"loading whisper + pipeline components in background "
+          f"(backend={args.backend}, model={args.model})...", flush=True)
     whisper_thread = threading.Thread(
         target=_load_whisper_bg, name="whisper-load", daemon=True)
+    prewarm_thread = threading.Thread(
+        target=_prewarm_pipeline_bg, name="pipeline-prewarm", daemon=True)
     whisper_thread.start()
+    prewarm_thread.start()
 
     species_id: str
+    id_message: str | None = None
+    classifier: TFLiteClassifierTTA | None = None
     if args.species:
         print(f"using --species override: {args.species}")
         species_id = args.species
+        if species_id not in common_names:
+            print(f"warn: {species_id} has no blurb in {db_path}; every "
+                  f"question will get the 'no information' reply",
+                  file=sys.stderr)
     else:
-        if not args.tflite_model.exists():
-            print(f"error: classifier model {args.tflite_model} not found",
-                  file=sys.stderr)
-            speak(voice, "I cannot find my vision model. Please check "
-                         "the setup.")
-            return 1
-        if not args.class_names.exists():
-            print(f"error: class names {args.class_names} not found",
-                  file=sys.stderr)
-            return 1
-
-        # Load classifier + class names. Temperature is optional.
-        import json
-        with open(args.class_names) as f:
-            class_names = json.load(f)
-
-        temperature = 1.0
-        if args.temperature_file.exists():
-            try:
-                with open(args.temperature_file) as f:
-                    temperature = float(
-                        json.load(f).get("temperature", 1.0))
-                print(f"loaded temperature T={temperature:.3f}")
-            except Exception as e:
-                print(f"warn: could not read {args.temperature_file} "
-                      f"({e}), using T=1.0")
-
+        # The manifest carries the preprocessing contract, class order,
+        # temperature and threshold; a missing or mismatched one is fatal
+        # rather than silently mis-preprocessing every frame.
         print("loading classifier...", end=" ", flush=True)
         t = time.perf_counter()
-        classifier = TFLiteClassifierTTA(
-            str(args.tflite_model), class_names, temperature=temperature)
+        try:
+            classifier = TFLiteClassifierTTA.from_dir(
+                args.model_dir, reference_kernels=args.kernels == "ref")
+        except ModelContractError as e:
+            print()
+            print(f"error: {e}", file=sys.stderr)
+            speaker.say_and_wait("I cannot find my vision model. Please "
+                                 "check the setup.")
+            return 1
         print(f"({time.perf_counter() - t:.1f}s)")
+        print(f"  {classifier.describe()}")
+
+        # Every species the classifier can announce needs a blurb, or the
+        # visitor gets "I don't have information about this species".
+        uncovered = sorted(
+            c for c in classifier.class_names
+            if c not in classifier.negative_classes
+            and c not in common_names)
+        if uncovered:
+            print(f"warn: {len(uncovered)} classifier classes have no blurb "
+                  f"in {db_path}: {uncovered}", file=sys.stderr)
 
         # Warm the TFLite interpreter with one throwaway prediction.
         print("warming classifier...", end=" ", flush=True)
@@ -679,57 +1314,73 @@ def main() -> int:
         print(f"({(time.perf_counter() - t) * 1000:.0f}ms)")
 
         # Ready beat: prompt the user to point the camera before we capture.
-        speak(voice, "Point me at an animal, then press enter.")
-        try:
-            input("\n  [enter when ready to identify] ")
-        except (EOFError, KeyboardInterrupt):
-            print("\naborted before identification")
-            return 0
+        # A failed identification speaks why and loops back here instead of
+        # exiting, so a retry doesn't cost a full model reload on stage.
+        speaker.say("Point me at an animal, then press enter.")
+        prompt = "\n  [enter when ready to identify] "
+        while True:
+            try:
+                input(prompt)
+            except (EOFError, KeyboardInterrupt):
+                print("\naborted before identification")
+                return 0
 
-        print("identifying species from camera...", flush=True)
-        species_id, conf, msg = identify_species(
-            classifier, args.camera_index, args.id_threshold,
-            save_dir=args.save_id_frames)
-        speak(voice, msg)
-        if species_id is None:
+            print("identifying species from camera...", flush=True)
+            species_id, conf, msg = identify_species(
+                classifier, args.camera_index, args.id_threshold,
+                save_dir=args.save_id_frames, common_names=common_names)
+            if species_id is not None:
+                id_message = msg
+                break
+            speaker.say(msg)
             print(f"identification failed (top conf {conf*100:.1f}%): "
                   f"{msg}", file=sys.stderr)
-            return 1
+            prompt = "\n  [enter to try again, Ctrl-C to quit] "
         print(f"identified: {species_id} ({conf*100:.1f}%)")
 
-    # --- Build pipeline on main thread (sqlite is thread-bound) -----------
-    print(f"building pipeline (backend={args.backend}, "
-          f"model={args.model})...", flush=True)
-    t = time.perf_counter()
-    kwargs = dict(
+    # --- Announce, then hand over to the visitor --------------------------
+    # The announcement plays on the Speaker's threads while the rest of this
+    # runs, and the push-to-talk prompt follows it. Nothing here waits for a
+    # background load: Whisper is joined at the first transcription, and the
+    # pipeline is built at the first question (see Session).
+    if id_message:
+        speaker.say(id_message)
+
+    build_kwargs = dict(
         db_path=args.db,
         backend=args.backend,
         model=args.model,
         backend_host=args.backend_host,
     )
     if args.threshold is not None:
-        kwargs["retrieval_threshold"] = args.threshold
-    pipeline = build_pipeline(**kwargs)
-    print(f"  built in {time.perf_counter() - t:.1f}s")
+        build_kwargs["retrieval_threshold"] = args.threshold
+    session = Session(speaker=speaker, whisper_thread=whisper_thread,
+                      prewarm_thread=prewarm_thread, background=background,
+                      background_errors=background_errors,
+                      build_kwargs=build_kwargs,
+                      min_audio_ctx=args.whisper_audio_ctx)
 
-    # --- Join whisper -----------------------------------------------------
-    print("waiting for whisper...", flush=True)
-    t = time.perf_counter()
-    whisper_thread.join()
-    if "whisper" in background_errors:
-        raise background_errors["whisper"]
-    whisper_model = background["whisper"]
-    print(f"  whisper loaded in {background['whisper_load_s']:.1f}s "
-          f"(foreground wait {time.perf_counter() - t:.1f}s)")
+    def _write_status(warm: dict) -> None:
+        """Safe from any thread; reports through the session's notes."""
+        try:
+            write_device_status(args.status_file, db_path=db_path,
+                                corpus_meta=corpus_meta, classifier=classifier,
+                                species_id=species_id, warmup=warm,
+                                kernels=args.kernels)
+            session.note(f"status written to {args.status_file}")
+        except OSError as e:
+            session.note(f"warn: could not write {args.status_file}: {e}")
 
     # --- Warm up ----------------------------------------------------------
-    print("warming up...", end=" ", flush=True)
-    t = time.perf_counter()
-    pipeline.answer(species_id, "warmup query, ignore")
-    print(f"({(time.perf_counter() - t) * 1000:.0f}ms)")
-    # growth_check(pipeline, species_id, n=12)
+    # Prefill the LLM with this species' prompt on its own thread, as soon
+    # as the prewarmed components exist, so the first question reuses the
+    # cached system prompt + SPECIES FACTS instead of processing them from
+    # scratch. It never blocks the visitor, and it stands down if a question
+    # gets there first (see Session.start_species_warmup).
+    _write_status({"pending": "species warmup running"})
+    session.start_species_warmup(species_id, on_done=_write_status)
 
-    return voice_repl(pipeline, species_id, whisper_model, voice)
+    return voice_repl(session, species_id, speaker)
 
 
 if __name__ == "__main__":

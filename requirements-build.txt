@@ -7,15 +7,20 @@
 # --- Corpus building (build_corpus.py, compile_blurbs.py) ---
 requests>=2.28            # Wikipedia scraping
 tqdm>=4.60                # progress bars
-sqlite-vec>=0.1.1         # vector store (shared with on-device; needed here too)
+sqlite-vec>=0.1.6         # vector store; >=0.1.6 for PARTITION KEY (schema v2). Match the device (0.1.9)
 sentence-transformers>=2.6  # embed chunks at build time
 
 # --- Blurb generation (build_blurbs.py, generate_prose.py) ---
 pyyaml>=6.0
 ollama>=0.2               # Python client for the local Ollama server
 
-# --- Model export (export_tflite.py, export_int8_tflite_subprocess.py) ---
-tensorflow>=2.16,<2.20    # float32 TFLite export
-onnx2tf>=1.20             # INT8 quantized TFLite export via ONNX intermediate
+# --- Model export ---
+# export_tflite.py (Keras MobileNet models). Verified with TF 2.21 / Keras 3.14;
+# exported models load in ai-edge-litert 2.1.4 (the device runtime).
+tensorflow>=2.16,<2.22
+ai-edge-litert==2.1.4     # tests/eval_tflite.py evaluates with the device runtime
+opencv-python             # eval uses the device preprocessing path
+# export_int8_tflite_subprocess.py (PyTorch/DINOv2 ONNX path ONLY — ImageNet mean/std input)
+onnx2tf>=1.20
 numpy>=1.26
 Pillow>=10.0

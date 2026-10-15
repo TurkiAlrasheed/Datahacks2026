@@ -182,7 +182,11 @@ class IntentClassifier:
         self._intents = intents
         self._centroids = np.stack(centroids, axis=0)  # (num_intents, dim)
 
-    def classify(self, query: str) -> IntentResult:
+    def classify(self, query: str,
+                 q_emb: np.ndarray | None = None) -> IntentResult:
+        """q_emb: the query's embedding from this classifier's embedder, if
+        the caller already has it (the pipeline shares one encode with the
+        wildlife gate)."""
         if not query or not query.strip():
             return IntentResult(
                 intent=Intent.OTHER,
@@ -192,7 +196,9 @@ class IntentClassifier:
                 all_scores={i: 0.0 for i in self._intents},
             )
 
-        q_emb = np.asarray(self.embedder.encode([query]), dtype=np.float32)[0]
+        if q_emb is None:
+            q_emb = self.embedder.encode([query])[0]
+        q_emb = np.asarray(q_emb, dtype=np.float32)
         if self.normalize:
             n = np.linalg.norm(q_emb)
             if n > 0:

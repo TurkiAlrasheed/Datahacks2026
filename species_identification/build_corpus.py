@@ -8,10 +8,11 @@ Run on your laptop, ship the output .db file to the device.
 
 Usage:
     pip install requests sentence-transformers sqlite-vec tqdm
-    python build_corpus.py species.json corpus.db
+    python species_identification/build_corpus.py species.json corpus.db
 
 Outputs:
     corpus.db          - SQLite file with chunks + vectors, ready to ship
+                         (schema v2 — see corpus_schema.py)
     corpus_dump.json   - Human-readable dump of every chunk for review
     build_report.txt   - Summary of coverage issues to review manually
 """
@@ -31,15 +32,21 @@ import sqlite_vec
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from corpus_schema import (  # noqa: E402
+    EMBED_MODEL,
+    create_schema,
+    insert_vector,
+    pack_embedding,
+    refresh_manifest,
+)
+
 # -----------------------------------------------------------------------------
 # Config
 # -----------------------------------------------------------------------------
 
 WIKI_API = "https://en.wikipedia.org/w/api.php"
 USER_AGENT = "GameExplorer-CorpusBuilder/1.0 (educational project)"
-
-EMBED_MODEL = "BAAI/bge-small-en-v1.5"
-EMBED_DIM = 384
 
 CHUNK_TOKENS = 200  # approx; we use word count as a cheap proxy
 CHUNK_OVERLAP = 30
@@ -376,38 +383,13 @@ def init_db(db_path: Path) -> sqlite3.Connection:
     conn.enable_load_extension(True)
     sqlite_vec.load(conn)
     conn.enable_load_extension(False)
-
-    conn.executescript(f"""
-        CREATE TABLE species (
-            species_id   TEXT PRIMARY KEY,
-            species_name TEXT NOT NULL,
-            common_name  TEXT,
-            source       TEXT
-        );
-
-        CREATE TABLE chunks (
-            id           INTEGER PRIMARY KEY,
-            species_id   TEXT NOT NULL REFERENCES species(species_id),
-            category     TEXT NOT NULL,
-            text         TEXT NOT NULL
-        );
-
-        CREATE INDEX idx_chunks_species ON chunks(species_id);
-        CREATE INDEX idx_chunks_species_cat ON chunks(species_id, category);
-
-        CREATE VIRTUAL TABLE chunk_vectors USING vec0(
-            embedding float[{EMBED_DIM}]
-        );
-    """)
-    conn.commit()
+    create_schema(conn)
     return conn
 
 
 def insert_chunks(conn: sqlite3.Connection, chunks: list[Chunk],
                   embeddings) -> None:
     """Insert chunks and their embeddings in a single transaction."""
-    import struct
-
     # Species row (one per species, from the first chunk)
     species_seen: dict[str, Chunk] = {}
     for c in chunks:
@@ -427,12 +409,8 @@ def insert_chunks(conn: sqlite3.Connection, chunks: list[Chunk],
             "INSERT INTO chunks(species_id, category, text) VALUES (?, ?, ?)",
             (chunk.species_id, chunk.category, chunk.text),
         )
-        rowid = cur.lastrowid
-        emb_bytes = struct.pack(f"{EMBED_DIM}f", *emb.tolist())
-        conn.execute(
-            "INSERT INTO chunk_vectors(rowid, embedding) VALUES (?, ?)",
-            (rowid, emb_bytes),
-        )
+        insert_vector(conn, cur.lastrowid, chunk.species_id, chunk.category,
+                      pack_embedding(emb))
 
     conn.commit()
 
@@ -505,6 +483,7 @@ def main(species_file: str, db_path: str) -> None:
         # Be polite to Wikipedia
         time.sleep(0.2)
 
+    meta = refresh_manifest(conn)
     conn.close()
     dump_file.write_text(
         json.dumps(dump_rows, indent=2, ensure_ascii=False),
@@ -513,7 +492,7 @@ def main(species_file: str, db_path: str) -> None:
     report.write(report_file)
 
     print(f"\nDone.")
-    print(f"  DB:     {db_file}")
+    print(f"  DB:     {db_file}  (corpus_version {meta['corpus_version']})")
     print(f"  Dump:   {dump_file}  ({len(dump_rows)} chunks)")
     print(f"  Report: {report_file}")
 
