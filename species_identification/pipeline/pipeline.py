@@ -119,7 +119,8 @@ DIRECT_ROUTE_INTENTS = frozenset({
 class LLMBackend(Protocol):
     """Anything with .name and .generate(messages) -> str."""
     name: str
-    def generate(self, messages: list[dict]) -> str: ...
+    def generate(self, messages: list[dict], *,
+                 max_tokens: int | None = None) -> str: ...
 
 
 # ---------------------------------------------------------------------------
@@ -350,26 +351,22 @@ class RoboRangerPipeline:
             latency=latency,
         )
 
-    def warmup(self, species_id: str) -> dict[str, float | str]:
+    def warmup_prompt(self, species_id: str
+                      ) -> tuple[list[dict] | None, dict[str, float | str]]:
         """
-        Run the stages the first real question will hit, so the visitor
-        doesn't pay cold-start costs: gate + intent embedding, the species'
-        partition KNN, and one LLM generation on this species' prompt (which
-        also leaves llama.cpp holding the system prompt + SPECIES FACTS prefix
-        in its prompt cache).
+        The cheap half of warmup: gate + intent embedding, the species'
+        partition KNN, and prompt assembly. Returns (messages, timings), or
+        (None, {"error": ...}) if the species isn't in the corpus.
 
-        A throwaway query through answer() doesn't do this: it is rejected at
-        the gate or intent stage and never reaches retrieval or the LLM.
-
-        Returns per-stage seconds. LLM failures are recorded under "error"
-        instead of raised, so a backend that isn't running is reported at
-        startup rather than crashing it.
+        Split out from warmup() so a caller can run this on the thread that
+        owns the sqlite connection and then push the LLM prefill onto
+        another thread (full_roboranger_run.py overlaps it with speaking the
+        identification).
         """
         timings: dict[str, float | str] = {}
         blurb = self.blurb_store.get(species_id)
         if blurb is None:
-            timings["error"] = f"species {species_id!r} not in corpus"
-            return timings
+            return None, {"error": f"species {species_id!r} not in corpus"}
         query = f"what does the {self._name(blurb)} look like"
 
         t = time.perf_counter()
@@ -388,12 +385,46 @@ class RoboRangerPipeline:
             intent_result=IntentResult(Intent.DESCRIPTION, "high", 1.0, 1.0,
                                        {}),
         )
-        t = time.perf_counter()
+        return messages, timings
+
+    def warm_llm(self, messages: list[dict]) -> str | None:
+        """
+        Push a prompt through the LLM with max_tokens=1. That pays the
+        prompt-processing cost now and leaves llama.cpp's --cache-prompt
+        holding the system prompt + SPECIES FACTS prefix, so the first real
+        question skips it. Generating a full answer here would only waste
+        tokens the visitor never hears.
+
+        Returns an error string, or None on success — a model server that
+        isn't up must be reported at startup, not crash it. Touches no
+        sqlite, so it is safe to call from another thread.
+        """
         try:
-            self.llm.generate(messages)
+            self.llm.generate(messages, max_tokens=1)
         except Exception as e:
-            timings["error"] = f"LLM backend: {type(e).__name__}: {e}"
+            return f"LLM backend: {type(e).__name__}: {e}"
+        return None
+
+    def warmup(self, species_id: str) -> dict[str, float | str]:
+        """
+        Run the stages the first real question will hit, so the visitor
+        doesn't pay cold-start costs: gate + intent embedding, the species'
+        partition KNN, and the LLM prefill for this species' prompt.
+
+        A throwaway query through answer() doesn't do this: it is rejected at
+        the gate or intent stage and never reaches retrieval or the LLM.
+
+        Returns per-stage seconds. LLM failures are recorded under "error"
+        instead of raised.
+        """
+        messages, timings = self.warmup_prompt(species_id)
+        if messages is None:
+            return timings
+        t = time.perf_counter()
+        error = self.warm_llm(messages)
         timings["llm"] = time.perf_counter() - t
+        if error:
+            timings["error"] = error
         return timings
 
     # -- internal helpers ---------------------------------------------------

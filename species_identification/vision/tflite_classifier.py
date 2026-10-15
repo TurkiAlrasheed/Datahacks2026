@@ -196,11 +196,22 @@ def tta_probs(view_logits: np.ndarray, temperature: float) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 def build_interpreter(model_path: str | os.PathLike, num_threads: int = 4,
-                      reference_kernels: bool = True):
+                      reference_kernels: bool = False):
     """
-    Build a LiteRT interpreter. reference_kernels=True matches the UNO Q
-    setup (XNNPACK disabled, BUILTIN_REF resolver) because XNNPACK has been
-    flaky there with INT8 models; eval on a laptop can pass False for speed.
+    Build a LiteRT interpreter. The default uses XNNPACK where available;
+    reference_kernels=True disables it (BUILTIN_REF resolver).
+
+    Earlier code disabled XNNPACK on the UNO Q, believing it was flaky with
+    INT8 models. Measured on the device (aarch64, LiteRT 2.1.4, 4 threads,
+    320px, per forward pass), that costs an enormous amount:
+
+        MobileNetV3-L dynamic-range   XNNPACK   94.7 ms   vs ref 1313.3 ms
+        MobileNetV2 QAT int8          XNNPACK   40.8 ms   vs ref 1754.3 ms
+
+    Both kernel paths gave identical top-1 labels on the check images, and
+    XNNPACK is what the manifest's temperature/threshold were fit with, so
+    it is the default. Keep reference_kernels for debugging a suspected
+    delegate problem.
     """
     try:
         from ai_edge_litert.interpreter import Interpreter, OpResolverType
@@ -211,6 +222,11 @@ def build_interpreter(model_path: str | os.PathLike, num_threads: int = 4,
             from tensorflow.lite import Interpreter
         OpResolverType = None
 
+    # TFLITE_DISABLE_XNNPACK is process-wide and read at interpreter
+    # construction, so always set it to match THIS call — otherwise one
+    # reference-kernel classifier silently disables XNNPACK for every later
+    # interpreter in the same process (which would quietly skew a
+    # ref-vs-default benchmark).
     if reference_kernels:
         os.environ["TFLITE_DISABLE_XNNPACK"] = "1"
         if OpResolverType is not None:
@@ -220,6 +236,8 @@ def build_interpreter(model_path: str | os.PathLike, num_threads: int = 4,
                     experimental_op_resolver_type=OpResolverType.BUILTIN_REF)
             except (AttributeError, TypeError):
                 pass
+    else:
+        os.environ.pop("TFLITE_DISABLE_XNNPACK", None)
     return Interpreter(model_path=str(model_path), num_threads=num_threads)
 
 
@@ -247,7 +265,7 @@ class TFLiteClassifierTTA:
     """
 
     def __init__(self, manifest: ModelManifest, *, num_threads: int = 4,
-                 reference_kernels: bool = True) -> None:
+                 reference_kernels: bool = False) -> None:
         self.manifest = manifest
         model_path = manifest.model_path
         if not model_path.is_file():
@@ -311,7 +329,14 @@ class TFLiteClassifierTTA:
         """One TTA view in the model's float domain, (H, W, 3), unbatched."""
         img = center_crop(rgb, crop_frac)
         if flip:
-            img = img[:, ::-1, :]
+            # cv2.flip, not img[:, ::-1, :]: the slice has a negative stride,
+            # which makes the following cv2.resize several times slower (6x
+            # on a 1920x1440 frame). Bit-identical output either way.
+            # Flipping AFTER the resize would be cheaper still, but is NOT
+            # equivalent — INTER_AREA's pixel grid isn't symmetric under a
+            # flip (measured max diff 44/255), which would invalidate the
+            # temperature and threshold fit in the manifest.
+            img = cv2.flip(img, 1)
         img = cv2.resize(img, (self.img_w, self.img_h),
                          interpolation=cv2.INTER_AREA)
         return normalize(img, self.manifest.input_range)

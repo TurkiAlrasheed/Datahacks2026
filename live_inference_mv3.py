@@ -51,7 +51,9 @@ from tflite_classifier import TFLiteClassifierTTA  # noqa: E402
 DEFAULT_MODEL_DIR = _ROOT / "species_identification" / "outputs" / "deploy"
 LIVE_LOG_ROOT     = _ROOT / "species_identification" / "outputs" / "live"
 
-CAMERA_INDEX    = 1            # laptop external webcam is 1, built-in / Uno Q is 0
+CAMERA_INDEX    = 1            # varies per host: 1 = laptop external webcam,
+                               # 2 on the current UNO Q. Check with
+                               # species_identification/list_cameras.py
 TOP_K           = 5
 CONF_THRESH     = 0.15
 INFER_HZ        = 2.0          # TTA uses 4x inferences — keep rate modest
@@ -94,12 +96,20 @@ def main(default_model_dir: Path = DEFAULT_MODEL_DIR) -> int:
                     help="directory with model_*.tflite + "
                          "model_manifest.json")
     ap.add_argument("--camera-index", type=int, default=CAMERA_INDEX)
-    ap.add_argument("--hz", type=float, default=INFER_HZ)
+    ap.add_argument("--hz", type=float, default=INFER_HZ,
+                    help="inference rate cap; set high (e.g. 100) to run "
+                         "flat out and read the achieved Hz on exit")
+    ap.add_argument("--kernels", choices=("ref", "default"), default="default",
+                    help="LiteRT kernels: default uses XNNPACK (14-43x "
+                         "faster on the UNO Q); ref disables it, for "
+                         "debugging a suspected delegate problem. Compare "
+                         "with tests/bench_device.py")
     ap.add_argument("--no-save-frames", action="store_true",
                     help="don't write an annotated capture every tick")
     args = ap.parse_args()
 
-    clf = TFLiteClassifierTTA.from_dir(args.model_dir)
+    clf = TFLiteClassifierTTA.from_dir(
+        args.model_dir, reference_kernels=args.kernels == "ref")
     print(f"[info] {clf.describe()}", flush=True)
 
     # Per-model log folder: comparing two models used to mean reading one

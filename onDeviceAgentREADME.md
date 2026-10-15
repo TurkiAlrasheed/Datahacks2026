@@ -26,34 +26,41 @@ Species identification happens **once at session start**. The camera is opened, 
 ```
                     ── STARTUP ──
                           │
-           ┌──────────────┴──────────────┐
-           │                             │
-    Load Piper TTS               Load Whisper STT
-    (speaks errors)              (background thread,
-    Check corpus.db schema        hides load time)
-           │                             │
-           ▼                             │
-  ONE-SHOT SPECIES ID                    │
-  Open camera (V4L2)                     │
-  Flush 5 stale buffer frames            │
-  Grab 1 frame                           │
-  TFLiteClassifierTTA                    │
-  (vision/tflite_classifier.py)          │
-    ├─ preprocessing from manifest       │
-    ├─ 4 TTA views                       │
-    ├─ temperature scaling               │
-    └─ averaged probabilities            │
-  conf ≥ id_threshold & not seashore?    │
-  → speak "I see a <species>"            │
-    (else say why and retry)             │
-  Camera released                        │
-           │                             │
-           └──────────────┬──────────────┘
-                          │  (join whisper thread)
-                          ▼
-               Build RoboRangerPipeline
+    Load Piper TTS (speaks errors)
+    Check corpus.db schema
                           │
-       warmup: retrieval + one LLM call for the species
+           ┌──────────────┼───────────────────┬──────────────────┐
+           │              │                   │                  │
+           ▼              ▼                   ▼                  ▼
+  ONE-SHOT SPECIES ID   [thread]          [thread]           (visitor is
+  Open camera (V4L2)    Load Whisper      PREWARM PIPELINE     aiming the
+  Flush 5 stale frames  STT               sentence-transformer camera, so
+  Grab 1 frame                            + torch import       this time is
+  TFLiteClassifierTTA                     gate/intent          free)
+  (vision/tflite_classifier.py)           centroids
+    ├─ preprocessing from manifest        LLM weights +
+    ├─ 4 TTA views                        system-prompt
+    ├─ temperature scaling                prefill (1 token)
+    └─ averaged probabilities                  │
+  conf ≥ id_threshold & not seashore?           │
+    (else say why and retry)                    │
+  Camera released                               │
+           │                                    │
+           └──────────────┬─────────────────────┘
+                          │  (join prewarm thread)
+                          ▼
+         Build RoboRangerPipeline  (~4 ms: open corpus.db,
+         BlurbStore, wire up the prewarmed components)
+                          │
+         warmup_prompt(species): gate + intent + partition KNN
+                          │
+           ┌──────────────┴──────────────┐
+           ▼                             ▼
+  speak "I see a <species>"      [thread] warm_llm():
+                                 prefill the species prompt
+           └──────────────┬──────────────┘
+                          │  (join whisper + llm-warm threads)
+                          ▼
        write device_status.json (corpus + model versions)
                           │
                  ══ VOICE LOOP (per turn) ══
@@ -217,6 +224,51 @@ cd ~/llama.cpp/build/bin
 
 `~/models/smollm2-360m.gguf` is a symbolic link to the actual location for the installed model, so replace it with the actual path to the model.
 `--cache-prompt` reuses the longest common prompt prefix between requests. The system prompt and the species header are identical across turns; the order of the blurb fields depends on the question's intent, so only turns with the same intent reuse the whole SPECIES FACTS block. The startup warmup primes the cache for the identified species.
+
+### 4. Benchmark the classifier on the device
+
+Accuracy was measured on the laptop and carries over (the device runs the same file through the same runtime), but **speed has to be measured on the UNO Q**. The shipped model is dynamic-range quantized, so it runs float activations; the fallback is full int8. Which is faster — and whether XNNPACK helps or hurts — is hardware-specific.
+
+```bash
+# every model x kernel x thread combination, no dataset needed
+python3 species_identification/tests/bench_device.py \
+    --model-dir species_identification/outputs/deploy \
+    --model-dir species_identification/outputs/mobilenetv2_qat \
+    --kernels ref,default --threads 2,4 --runs 10 \
+    --images negative_test_images \
+    --camera-index 0 \
+    --json bench_unoq.json
+```
+
+It reports, per configuration: interpreter load, preprocessing per TTA view, one forward pass, and **`identify`** — the full 4-view startup path, which is the number a visitor feels. `--camera-index` additionally times the real open → flush 5 frames → grab → classify sequence. Each configuration runs in its own process, because `TFLITE_DISABLE_XNNPACK` is process-wide and read when an interpreter is constructed.
+
+Timing uses a synthetic **640x480** frame (what the camera delivers), because preprocessing cost scales with source resolution — timing a multi-megapixel JPEG reports a cost the device never pays. `--timing-image` overrides that deliberately; `--images` is only for comparing predictions.
+
+**Measured on the UNO Q** (aarch64, Linux 6.16, Python 3.13, LiteRT 2.1.4, 4 threads, per forward pass):
+
+| model | XNNPACK (`--kernels default`) | reference kernels (`--kernels ref`) |
+|---|---|---|
+| MobileNetV3-L dynamic-range (shipped) | **94.7 ms** | 1313.3 ms |
+| MobileNetV2 QAT int8 (fallback) | **40.8 ms** | 1754.3 ms |
+
+So **XNNPACK is 14–43x faster on this device**, and it is now the default for `full_roboranger_run.py`, `live_inference_mv3.py` and the classifier itself. The older code disabled it on the belief that it was flaky with INT8 on the UNO Q; that is not what the device measures, both kernel paths produced identical top-1 labels on the check images, and XNNPACK is the path the manifest's temperature/threshold were fit with. Keep `--kernels ref` for debugging a suspected delegate problem. RSS was 241–256 MB for the classifier process.
+
+The camera path costs about 1.07 s on top of identification, measured with `--camera-test`: 144 ms to open, 861 ms to flush 5 stale frames (~172 ms each), 64 ms for the real grab. Camera index is per-host — it is **2** on the current UNO Q, not 0; check with `species_identification/list_cameras.py`.
+
+Reading the result:
+
+- **Identification happens once per session**, so even ~2 s is acceptable. Prefer the more accurate model (`outputs/deploy`, +0.7 pt top-1 and +3.5 pt precision over the int8 fallback) unless it is far slower on the device. With XNNPACK the per-pass gap between the two models is ~54 ms, i.e. ~0.2 s over 4 TTA views — not worth the accuracy.
+- Pass `--images` with a few frames and run the **same command on the laptop**: the per-image top-3 lines should match. That is the check that a faster kernel didn't change the answers.
+- Watch the per-view preprocessing line. The flipped view used to be several times more expensive than the others because `img[:, ::-1, :]` hands `cv2.resize` a negative-stride array; the classifier now uses `cv2.flip`, which is bit-identical and avoids that.
+- If the int8 fallback wins, either run with `--model-dir species_identification/outputs/mobilenetv2_qat` or copy that directory over `outputs/deploy/`. Both manifests already carry their own fitted temperature and threshold, so nothing else changes.
+- To trade accuracy for startup time, cut `tta_views` in the manifest (4 views → 1 costs ~1.8 pt top-1 and saves ~75% of identification). Refit afterwards with `eval_tflite.py --write`, since temperature and threshold are fit for a specific view set.
+
+For sustained throughput (not needed for one-shot identification) run the camera loop flat out and read the achieved rate it prints on exit:
+
+```bash
+python3 live_inference_mv3.py --model-dir species_identification/outputs/deploy \
+    --camera-index 0 --hz 100 --no-save-frames   # Ctrl-C to stop
+```
 
 ---
 
@@ -442,6 +494,7 @@ With this model, the previous fixed 0.55 threshold gives 87.7% precision / 63.5%
         ├── test_corpus.py                # retrieval (species-partitioned KNN) + open_db()
         ├── retrieval_recall_check.py     # recall of legacy vs partitioned retrieval
         ├── eval_tflite.py                # device-path model eval; fits temperature + threshold
+        ├── bench_device.py               # on-device latency/memory sweep (model x kernels x threads)
         ├── test_pipeline_integration.py  # pipeline plumbing, every path
         ├── test_intent_units.py          # intent classifier unit tests
         ├── test_phrasing.py              # prompt phrasing regression tests

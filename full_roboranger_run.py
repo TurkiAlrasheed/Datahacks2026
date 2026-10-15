@@ -19,6 +19,13 @@ hiccup) asks you to try again instead of exiting, so a retry doesn't reload
 every model. To re-identify after that, restart the loop — keeps the
 per-turn latency budget intact (no ~1s camera+TTA on every button press).
 
+Startup overlaps work with the visitor's own time: Whisper, the embedder,
+the gate/intent centroids and the LLM weights all load on background
+threads while the camera is being aimed, and the LLM prefill for the
+identified species runs while its name is being spoken. Only the corpus
+connection is built on the main thread, because sqlite3 connections are
+bound to their creating thread.
+
 The classifier is whatever model lives in --model-dir (default
 species_identification/outputs/deploy): a model_*.tflite plus
 model_manifest.json, which names the .tflite file and declares the input
@@ -106,7 +113,7 @@ from corpus_schema import (CorpusSchemaError, check_corpus_schema,  # noqa: E402
                            read_meta)
 from mem_check import print_total_rss, growth_check  # noqa: E402
 from pipeline import RoboRangerPipeline, Response  # noqa: E402
-from pipeline_factory import build_pipeline  # noqa: E402
+from pipeline_factory import build_pipeline, prewarm_components  # noqa: E402
 from test_corpus import open_db  # noqa: E402
 from tflite_classifier import (ModelContractError,  # noqa: E402
                                TFLiteClassifierTTA)
@@ -484,7 +491,10 @@ def voice_repl(pipeline: RoboRangerPipeline, species_id: str,
             total_voice_s = stt_s + resp.latency.get("total", 0.0) + tts_s
             print_turn(resp, stt_s, tts_s, total_voice_s, transcript)
 
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
+            # EOFError: stdin closed (piped input, systemd, ssh without a
+            # tty). Exit as cleanly as Ctrl-C rather than tracebacking out
+            # of the push-to-talk prompt.
             print("\nbye")
             return 0
 
@@ -523,7 +533,8 @@ def _sha256(path: Path) -> str:
 
 def write_device_status(path: Path, *, db_path: Path, corpus_meta: dict,
                         classifier: TFLiteClassifierTTA | None,
-                        species_id: str, warmup: dict) -> None:
+                        species_id: str, warmup: dict,
+                        kernels: str | None = None) -> None:
     """
     Record exactly which corpus and model this unit is running — the thing a
     device would report upstream for OTA bookkeeping (see "OTA corpus
@@ -540,6 +551,7 @@ def write_device_status(path: Path, *, db_path: Path, corpus_meta: dict,
             "temperature": m.temperature,
             "id_threshold": m.id_threshold,
             "evaluated_at": m.eval.get("evaluated_at"),
+            "kernels": kernels,
         }
     status = {
         "written_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -606,6 +618,11 @@ def main() -> int:
     p.add_argument("--id-threshold", type=float, default=None,
                    help="override the manifest's min confidence to accept "
                         "an identification")
+    p.add_argument("--kernels", choices=("ref", "default"), default="default",
+                   help="LiteRT kernels: default uses XNNPACK (14-43x faster "
+                        "on the UNO Q); ref disables it, for debugging a "
+                        "suspected delegate problem. Compare with "
+                        "species_identification/tests/bench_device.py")
     p.add_argument("--status-file", type=Path,
                    default=Path("device_status.json"),
                    help="where to record the running corpus/model versions")
@@ -709,12 +726,19 @@ def main() -> int:
     # from a single camera frame. A failed identification speaks why and
     # waits for another try — the loop won't start with an unknown species.
     #
-    # Performance note: while the user is pointing the camera and we're
-    # running the classifier (~1-2s), the pipeline + whisper builds run on
-    # background threads. They almost always finish before identification
-    # does, hiding several seconds of latency behind work the user is
-    # already waiting for. The threads write into a shared dict and we
-    # join them right before entering the voice loop.
+    # Performance note: aiming the camera and classifying one frame takes
+    # several seconds of the visitor's time, so everything that doesn't need
+    # the species loads on background threads meanwhile:
+    #
+    #   whisper-load      the STT model
+    #   pipeline-prewarm  sentence-transformer, gate + intent centroids, and
+    #                     a 1-token LLM request that makes the model server
+    #                     load its weights and cache the system prompt
+    #
+    # Only the corpus connection is left for the main thread (sqlite3
+    # connections are bound to the thread that creates them), and that part
+    # is milliseconds. The threads write into a shared dict and we join them
+    # after identification.
     import threading
 
     background: dict[str, object] = {}
@@ -729,14 +753,29 @@ def main() -> int:
         except BaseException as e:
             background_errors["whisper"] = e
 
-    # Kick off whisper load only — pipeline build has thread-bound sqlite
-    # connections, so we have to build it on the main thread.
-    print("loading whisper in background...", flush=True)
+    def _prewarm_pipeline_bg():
+        try:
+            t = time.perf_counter()
+            background["components"] = prewarm_components(
+                backend=args.backend, model=args.model,
+                backend_host=args.backend_host)
+            background["components_s"] = time.perf_counter() - t
+        except BaseException as e:
+            background_errors["components"] = e
+
+    print(f"loading whisper + pipeline components in background "
+          f"(backend={args.backend}, model={args.model})...", flush=True)
     whisper_thread = threading.Thread(
         target=_load_whisper_bg, name="whisper-load", daemon=True)
+    prewarm_thread = threading.Thread(
+        target=_prewarm_pipeline_bg, name="pipeline-prewarm", daemon=True)
     whisper_thread.start()
+    prewarm_thread.start()
 
     species_id: str
+    # Spoken after the pipeline is assembled, so the LLM prefill can run
+    # while this plays instead of after it.
+    id_message: str | None = None
     classifier: TFLiteClassifierTTA | None = None
     if args.species:
         print(f"using --species override: {args.species}")
@@ -752,7 +791,8 @@ def main() -> int:
         print("loading classifier...", end=" ", flush=True)
         t = time.perf_counter()
         try:
-            classifier = TFLiteClassifierTTA.from_dir(args.model_dir)
+            classifier = TFLiteClassifierTTA.from_dir(
+                args.model_dir, reference_kernels=args.kernels == "ref")
         except ModelContractError as e:
             print()
             print(f"error: {e}", file=sys.stderr)
@@ -795,28 +835,92 @@ def main() -> int:
             species_id, conf, msg = identify_species(
                 classifier, args.camera_index, args.id_threshold,
                 save_dir=args.save_id_frames)
-            speak(voice, msg)
             if species_id is not None:
+                id_message = msg
                 break
+            # Refusals are spoken immediately — there's nothing to overlap.
+            speak(voice, msg)
             print(f"identification failed (top conf {conf*100:.1f}%): "
                   f"{msg}", file=sys.stderr)
             prompt = "\n  [enter to try again, Ctrl-C to quit] "
         print(f"identified: {species_id} ({conf*100:.1f}%)")
 
-    # --- Build pipeline on main thread (sqlite is thread-bound) -----------
-    print(f"building pipeline (backend={args.backend}, "
-          f"model={args.model})...", flush=True)
+    # --- Assemble the pipeline --------------------------------------------
+    # The slow half loaded on the prewarm thread while the visitor was
+    # aiming the camera. If they were quick, say something rather than
+    # standing there silently — speaking costs ~2s of cover.
+    if prewarm_thread.is_alive():
+        print("waiting for pipeline components...", flush=True)
+        if id_message:  # a visitor is standing there; --species isn't
+            speak(voice, "Got it. One moment while I get ready.")
+    t = time.perf_counter()
+    prewarm_thread.join()
+    components = background.get("components")
+    if "components" in background_errors:
+        print(f"warn: background prewarm failed "
+              f"({background_errors['components']!r}); loading inline",
+              file=sys.stderr)
+        components = None
+    else:
+        timings = getattr(components, "timings", None) or {}
+        print(f"  components ready in {background['components_s']:.1f}s "
+              f"(foreground wait {time.perf_counter() - t:.1f}s): "
+              + ", ".join(f"{k}={v:.1f}s" for k, v in timings.items()
+                          if isinstance(v, float)))
+        if timings.get("llm_error"):
+            print(f"warn: LLM prewarm: {timings['llm_error']}",
+                  file=sys.stderr)
+
+    print("building pipeline...", end=" ", flush=True)
     t = time.perf_counter()
     kwargs = dict(
         db_path=args.db,
         backend=args.backend,
         model=args.model,
         backend_host=args.backend_host,
+        components=components,
     )
     if args.threshold is not None:
         kwargs["retrieval_threshold"] = args.threshold
     pipeline = build_pipeline(**kwargs)
-    print(f"  built in {time.perf_counter() - t:.1f}s")
+    print(f"({(time.perf_counter() - t) * 1000:.0f}ms)")
+
+    # --- Warm up ----------------------------------------------------------
+    # Retrieval and prompt assembly run here, because they use the corpus
+    # connection this thread owns. The LLM prefill is pure HTTP, so it runs
+    # on a thread and overlaps with speaking the identification — otherwise
+    # the visitor waits through the announcement and then through prompt
+    # processing for a prompt we already know.
+    t_warm = time.perf_counter()
+    messages, warm = pipeline.warmup_prompt(species_id)
+    llm_warm: dict[str, object] = {}
+
+    def _warm_llm_bg():
+        t0 = time.perf_counter()
+        error = pipeline.warm_llm(messages)
+        llm_warm["llm"] = time.perf_counter() - t0
+        if error:
+            llm_warm["error"] = error
+
+    warm_thread = None
+    if messages is not None:
+        warm_thread = threading.Thread(target=_warm_llm_bg, name="llm-warm",
+                                       daemon=True)
+        warm_thread.start()
+
+    if id_message:
+        speak(voice, id_message)
+
+    if warm_thread is not None:
+        warm_thread.join()
+        warm.update(llm_warm)
+    print("warmed up ("
+          + ", ".join(f"{k}={v * 1000:.0f}ms" for k, v in warm.items()
+                      if isinstance(v, float))
+          + f"; total {(time.perf_counter() - t_warm) * 1000:.0f}ms)")
+    if "error" in warm:
+        print(f"warn: warmup: {warm['error']}", file=sys.stderr)
+    # growth_check(pipeline, species_id, n=12)
 
     # --- Join whisper -----------------------------------------------------
     print("waiting for whisper...", flush=True)
@@ -828,23 +932,11 @@ def main() -> int:
     print(f"  whisper loaded in {background['whisper_load_s']:.1f}s "
           f"(foreground wait {time.perf_counter() - t:.1f}s)")
 
-    # --- Warm up ----------------------------------------------------------
-    # Real retrieval + one LLM generation on this species' prompt, so the
-    # first visitor question doesn't pay cold embedder / llama.cpp costs.
-    print("warming up...", end=" ", flush=True)
-    t = time.perf_counter()
-    warm = pipeline.warmup(species_id)
-    print(f"({(time.perf_counter() - t) * 1000:.0f}ms: "
-          + ", ".join(f"{k}={v * 1000:.0f}ms" for k, v in warm.items()
-                      if isinstance(v, float)) + ")")
-    if "error" in warm:
-        print(f"warn: warmup: {warm['error']}", file=sys.stderr)
-    # growth_check(pipeline, species_id, n=12)
-
     try:
         write_device_status(args.status_file, db_path=db_path,
                             corpus_meta=corpus_meta, classifier=classifier,
-                            species_id=species_id, warmup=warm)
+                            species_id=species_id, warmup=warm,
+                            kernels=args.kernels)
         print(f"status written to {args.status_file}")
     except OSError as e:
         print(f"warn: could not write {args.status_file}: {e}",

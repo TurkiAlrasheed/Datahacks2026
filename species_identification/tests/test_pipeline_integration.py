@@ -110,12 +110,15 @@ class StubLLM:
 
     def __init__(self) -> None:
         self.calls: list[list[dict]] = []
+        self.max_tokens: list[int | None] = []
         self.should_raise = False
 
-    def generate(self, messages: list[dict]) -> str:
+    def generate(self, messages: list[dict], *,
+                 max_tokens: int | None = None) -> str:
         if self.should_raise:
             raise RuntimeError("stub error")
         self.calls.append(messages)
+        self.max_tokens.append(max_tokens)
         return "stub response"
 
 
@@ -430,11 +433,18 @@ def main() -> int:
 
     print("\n=== test 11: warmup reaches retrieval + LLM ===")
     llm.calls.clear()
+    llm.max_tokens.clear()
     timings = pipeline.warmup("Test_species")
     check("warmup ran retrieval and LLM",
           "retrieval" in timings and "llm" in timings and len(llm.calls) == 1,
           str(timings))
     check("no error reported", "error" not in timings, str(timings))
+    check("warmup prefills only (max_tokens=1), doesn't generate an answer",
+          llm.max_tokens == [1], str(llm.max_tokens))
+    msgs, split = pipeline.warmup_prompt("Test_species")
+    check("warmup_prompt returns messages without calling the LLM",
+          msgs is not None and len(llm.calls) == 1 and "retrieval" in split,
+          str(split))
     llm.should_raise = True
     timings = pipeline.warmup("Test_species")
     check("LLM failure reported, not raised", "error" in timings,

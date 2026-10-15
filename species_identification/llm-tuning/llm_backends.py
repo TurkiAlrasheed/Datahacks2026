@@ -6,9 +6,12 @@ Two backends with the same interface:
   - LlamaCppBackend: Uno Q deployment via llama.cpp's OpenAI-compatible
     /v1/chat/completions endpoint.
 
-Both expose `name`, `model`, and `generate(messages) -> str`. Sampling
-params are pinned identically on both so cross-environment differences
-come from the runtime, not the sampler.
+Both expose `name`, `model`, and
+`generate(messages, *, max_tokens=None) -> str`. Sampling params are pinned
+identically on both so cross-environment differences come from the runtime,
+not the sampler. `max_tokens` overrides the shared cap for one call — used
+by pipeline_factory.prewarm_components() to send a 1-token request that
+makes the server load its weights and cache the system prompt.
 
 This module deliberately has no dependencies on any other RoboRanger
 module — anything that needs an LLM client can import from here without
@@ -45,7 +48,8 @@ class OllamaBackend:
         self.model = model
         self.host = host
 
-    def generate(self, messages: list[dict]) -> str:
+    def generate(self, messages: list[dict], *,
+                 max_tokens: int | None = None) -> str:
         body = json.dumps({
             "model": self.model,
             "messages": messages,
@@ -55,7 +59,7 @@ class OllamaBackend:
                 "top_p": SAMPLING["top_p"],
                 "top_k": SAMPLING["top_k"],
                 "seed": SAMPLING["seed"],
-                "num_predict": SAMPLING["max_tokens"],
+                "num_predict": max_tokens or SAMPLING["max_tokens"],
             },
         }).encode()
         req = urllib.request.Request(
@@ -83,7 +87,8 @@ class LlamaCppBackend:
         self.host = host
         self.model = model
 
-    def generate(self, messages: list[dict]) -> str:
+    def generate(self, messages: list[dict], *,
+                 max_tokens: int | None = None) -> str:
         body = json.dumps({
             "model": self.model,
             "messages": messages,
@@ -91,7 +96,7 @@ class LlamaCppBackend:
             "top_p": SAMPLING["top_p"],
             "top_k": SAMPLING["top_k"],
             "seed": SAMPLING["seed"],
-            "max_tokens": SAMPLING["max_tokens"],
+            "max_tokens": max_tokens or SAMPLING["max_tokens"],
         }).encode()
         req = urllib.request.Request(
             f"{self.host}/v1/chat/completions",

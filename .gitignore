@@ -43,3 +43,6 @@ species_identification/outputs/.eval_cache/
 species_identification/outputs/live/
 device_status.json
 *.db.tmp
+
+# benchmark outputs
+bench_*.json
