@@ -50,24 +50,23 @@ Species identification happens **once at session start**. The camera is opened, 
   say "I see a <common name>"                only if it's still running)
   (Speaker threads; returns at once)
            │
-  components already loaded?
-    yes → Build RoboRangerPipeline (~4 ms: open corpus.db,
-          BlurbStore, wire up the prewarmed components)
-          warmup_prompt(species): gate + intent + partition KNN
-          [thread] warm_llm(): prefill the species prompt
-          (not joined: a question that arrives first queues
-          behind it on llama-server and reuses its prefix)
-    no  → skip; the first question builds the pipeline
+       write device_status.json (corpus + model versions)
                           │
-       write device_status.json (corpus + model versions;
-       rewritten when warm_llm finishes)
+  [thread llm-warm, never joined]
+    wait for the prewarm thread
+    own corpus.db connection → throwaway RoboRangerPipeline
+    warmup_prompt(species): gate + intent + partition KNN
+    warm_llm(): prefill system prompt + SPECIES FACTS (max_tokens=1)
+    rewrite device_status.json
+    (stands down if the visitor has already asked)
                           │
                  ══ VOICE LOOP (per turn) ══
                           │
               wait until the Speaker is quiet
               push-to-talk: Enter to record
                           │
-              whisper.transcribe()  (first turn joins whisper-load)
+              whisper.transcribe(), encoder window sized to the clip
+              (first turn joins whisper-load)
                           │
                           ▼
     ┌──────────────────────────────────────────────┐
@@ -130,14 +129,15 @@ Identification is the one moment in a session when the visitor is busy — aimin
 | Classifier load + 4-view `identify()` | main thread | 4 × 94.7 ms + preprocessing on the UNO Q (see the device benchmark below) | it *produces* the species |
 | `build_pipeline(components=...)`: open `corpus.db` + `BlurbStore`, wire up the prewarmed parts | main thread | **4 ms** | yes |
 | `warmup_prompt()`: gate, intent, partition KNN, prompt assembly | main thread | 40 ms | yes |
-| `warm_llm()`: prefill the species prompt | `llm-warm`, overlapping the announcement and the visitor's first question; never joined | 2.2 s | yes |
+| `warmup_prompt()` + `warm_llm()`: prefill the system prompt + SPECIES FACTS (287 tokens; the part every description question shares) | `llm-warm`, with its own `corpus.db` connection, started at identification and waiting for `pipeline-prewarm`; never joined | 2.2 s (27.5 s on the UNO Q when it still prefilled a whole 548-token prompt) | yes |
 
 So ~17.6 s of loading happens while the camera is in use. The announcement starts the moment identification finishes, and the push-to-talk prompt follows it: nothing is joined first. The species prefill keeps running while the visitor presses the button and talks. Whisper is joined at the first transcription. If the prewarm thread is still running, the pipeline is built at the first question.
 
 What the sequence does when things don't line up:
 
-- **The visitor is quick.** If the prewarm thread is still running at identification, the announcement and the prompt don't wait for it. The first question joins it, says "One moment while I get ready." if it's still loading, and skips the species warmup, because the real question does the same prefill.
-- **A question beats the species prefill.** llama-server works through one request at a time, so the question queues behind the 1-token warm request and then reuses the prefix it cached.
+- **Loading outlasts the camera step.** On the UNO Q, loading took 43 s, longer than identification. The `llm-warm` thread still prefills the species prompt as soon as loading finishes, because it builds its own pipeline on its own corpus connection instead of waiting for the main thread. An earlier version skipped the warmup in this case, and the first question then took 25 s to its first sentence, paying for the whole prompt from scratch.
+- **The visitor is quick.** If the visitor presses the button before loading finishes, the warmup stands down: the question does the same prefill, and a second request would only queue ahead of it. The question joins the prewarm thread and says "One moment while I get ready." while it waits.
+- **A question beats the species prefill.** Every request is pinned to slot 0 (and the server runs with `-np 1`), so a question that arrives mid-warmup waits for the 1-token request and then reuses the prefix it cached. Before the pin, it ran in a second slot beside the warmup, with no shared cache and half the CPU each.
 - **The model server isn't up.** That 1-token request is what makes llama.cpp load its weights, so start `llama-server` before the app. If it isn't reachable the failure is recorded rather than raised: the run prints `warn: LLM prewarm: …`, continues, and the first visitor question pays the model load.
 - **The prewarm thread fails outright.** `build_pipeline()` falls back to loading the components inline, so a broken thread costs time instead of ending the session.
 - **Contention.** The announcement, the prefill and the first transcription share four cores. Background threads log through the session and the loop prints those lines between turns, so they don't land in the middle of the push-to-talk prompt.
@@ -147,8 +147,12 @@ What the sequence does when things don't line up:
 The 100-token cap stops SmolLM2 mid-sentence, and generating a full answer on the UNO Q takes long enough (~20 s) that synthesizing it only afterwards left the visitor in silence. So each turn now overlaps generation, synthesis and playback:
 
 - **Filler line.** When a question takes an LLM path, `answer(on_llm_start=…)` cues a filler line ("Gathering all the information...", "Let me check my field notes.", "Good question. One moment."; they rotate). Each line is rendered while the speaker is idle at startup, so playing it takes no CPU away from prompt processing. Direct-route answers skip the filler.
-- **Streaming.** `answer(on_sentence=…)` streams from the backend (`LlamaCppBackend.stream()` / `OllamaBackend.stream()`) and hands over each sentence as soon as it is complete. A trailing fragment cut off by `max_tokens` is dropped, both when streaming and in plain `generate()` answers. Initials ("M. melodia"), "U.S.", "e.g." and decimals don't count as sentence ends.
+- **Streaming.** `answer(on_sentence=…)` streams from the backend (`LlamaCppBackend.stream()` / `OllamaBackend.stream()`) and hands over each sentence as soon as it is complete. A trailing fragment cut off by `max_tokens` is dropped, both when streaming and in plain `generate()` answers. Initials ("M. melodia"), "U.S.", "e.g." and decimals don't count as sentence ends, and neither does a period whose next word starts with a lowercase letter or a digit: on the device the early stop once ended an answer at "…Beethoven's Symphony No." A sentence only counts as finished once the next one has started.
+- **Prompt echo.** SmolLM2-360M once answered by reading out its own SPECIES FACTS block. The prompt's section headings (`prompt_builder.PROMPT_HEADINGS`) are now stop strings, so the server ends such an answer at once. The pipeline also never speaks a sentence containing a heading, a "Species:" line or a "- habitat:" style fact line, and ends the answer there. If nothing usable is left, the visitor hears the answer built straight from the blurb fields (or the "had trouble answering" line for intents without one), on the `llm_error` path.
+- **Early stop.** At the first sentence end after `STREAM_SOFT_TOKEN_LIMIT` (60) streamed tokens, the pipeline closes the stream and the server stops generating. The 100-token cap had usually cut a third sentence that was then thrown away: on the UNO Q about 30 of 100 tokens (~9 s) of generation went into it, competing with speech synthesis for the CPU.
 - **Speaker.** `full_roboranger_run.Speaker` runs a piper synth thread and a player thread, so sentence N+1 is synthesized while sentence N plays. Piper splits longer texts (direct-route answers, the announcement) into sentences, and each sentence becomes its own clip. Every clip starts with 120 ms of silence so a freshly opened output device doesn't clip the first syllable; this replaces the old `"-" + text` workaround.
+- **TTS threads.** piper builds its onnxruntime session with one spin-waiting worker per core. On the UNO Q that took cores from llama-server while it was generating the rest of an answer: in the first streaming run, generation slowed from about 20 s for a whole answer to 40 s. llama.cpp stalls whenever one of its threads loses its core. `load_piper_voice()` creates the session with `--tts-threads` workers (default 1) and no spinning. On the laptop one thread synthesizes 4 s of speech in 0.30 s, against 0.12 s with every core, still far faster than playback, but on the UNO Q one thread synthesized an 8 s sentence in 9.3 s with nothing else running, slower than real time. So there are two sessions: the one-thread one while the LLM is generating, and an all-core one (`--tts-idle-threads`, default every core) for everything else: the announcement, blurb answers, and whatever is left to say once generation ends. The synth thread picks one per sentence, and the second session loads in the background at startup. It holds another copy of the voice in memory (the voice file is ~60 MB). Even with one Piper thread during generation, it wasn't enough: with Piper on one thread, generation in the loop still ran at 3.48 tokens/s against 10.11 in `llama-bench`, which is why llama-server now runs generation on 3 threads (see *Start the llama.cpp server*).
+- **Whisper window.** whisper.cpp pads every clip to a 30 s window. `transcribe()` sizes the encoder context to the clip instead: 50 per second of audio + 32, at least `--whisper-audio-ctx`, default 256 (about 5 s). `bench_stt.py` measured 256 fastest on the UNO Q: 0.69 s at 4 threads, 1.27 s at 2. On the laptop's test clip it changed "Push-To-Talk" to "push-to-tot", so check transcripts; `--whisper-audio-ctx 0` restores the full window. The load thread also runs one throwaway transcription of silence, so the first question doesn't pay the slow first call.
 - **Timing table.** All rows are measured from button-up: `stt` (transcription only), the pipeline stages, `llm_first_sentence`, `first_audio` (usually the filler), `first_answer`, `tts_synth` and `total_voice` (to the end of speech). The old `stt` row included the time spent waiting to press Enter and talking, and the old `tts` row included playback.
 
 ### Stage descriptions
@@ -163,7 +167,7 @@ The 100-token cap stops SmolLM2 mid-sentence, and generating a full answer on th
 | Direct route | `species_identification/pipeline/pipeline.py` | High-confidence simple intents (danger, diet, habitat, size, behavior, description) answered from blurb fields — no retrieval, no LLM. Sub-millisecond. A missing field falls through to retrieval + LLM. |
 | Retrieval | `species_identification/tests/test_corpus.py` | Exact KNN inside the species' sqlite-vec partition (`species_id` partition key), excluding the blurb chunk. L2 distance → cosine; chunks below threshold dropped. |
 | Prompt builder | `species_identification/llm-tuning/prompt_builder.py` | Assembles system + user messages. Intent drives which blurb fields lead and which template is used. Handles danger polarity. |
-| LLM | `species_identification/llm-tuning/llm_backends.py` | `LlamaCppBackend` posts to llama.cpp's `/v1/chat/completions` at `localhost:8080` with `cache_prompt: true`; `stream()` reads the server-sent events. temp=0.2, max_tokens=100 (same for the Ollama backend used on the laptop, which streams NDJSON). |
+| LLM | `species_identification/llm-tuning/llm_backends.py` | `LlamaCppBackend` posts to llama.cpp's `/v1/chat/completions` at `localhost:8080` with `cache_prompt: true`, pinned to slot 0 (`id_slot`); `stream()` reads the server-sent events. temp=0.2, max_tokens=100 (same for the Ollama backend used on the laptop, which streams NDJSON). |
 | TTS | `full_roboranger_run.py` | `Speaker`: a piper synth thread writes one WAV per sentence and a player thread plays them with `aplay` (`winsound` on Windows) while the next one is synthesized. |
 | Pipeline construction | `species_identification/pipeline/pipeline_factory.py` | Two-stage, so loading can overlap the camera. `prewarm_components()` builds the embedder, centroids and LLM backend and touches no sqlite, so it runs on any thread; `build_pipeline(components=…)` then opens `corpus.db` and the `BlurbStore` on the thread that will use them (~4 ms). Called with no `components` it loads everything itself, which is what the text and voice-only entry points do. |
 
@@ -261,7 +265,7 @@ cd ~/llama.cpp/build/bin
 ./llama-server \
     -m ~/models/smollm2-360m.gguf \
     --host 0.0.0.0 --port 8080 \
-    --ctx-size 4096 --threads 4 \
+    --ctx-size 4096 -t 3 -tb 4 -np 1 \
     --chat-template chatml \
     --cache-prompt
 ```
@@ -269,7 +273,23 @@ cd ~/llama.cpp/build/bin
 `~/models/smollm2-360m.gguf` is a symbolic link to the actual location for the installed model, so replace it with the actual path to the model.
 `--cache-prompt` reuses the longest common prompt prefix between requests. The system prompt and the species header are identical across turns; the order of the blurb fields depends on the question's intent, so only turns with the same intent reuse the whole SPECIES FACTS block.
 
-**Start this before `full_roboranger_run.py`.** Startup sends the server two prefill-only requests (`max_tokens=1`): one while the camera is being aimed, carrying the real system prompt — that is what makes llama.cpp load its weights and cache the prefix — and one for the identified species' prompt, which runs while the announcement plays and the visitor asks a first question. If the server isn't reachable, the run prints `warn: LLM prewarm: …` and carries on; the first visitor question then pays the model load.
+The thread and slot flags come from measurements on the UNO Q:
+
+| `llama-bench` (b8925), tokens/s | prompt (pp512) | generation (tg64) |
+|---|---|---|
+| SmolLM2-360M Q8_0, 3 threads | 13.35 | 8.79 |
+| SmolLM2-360M Q8_0, 4 threads | 17.28 | 10.11 |
+| SmolLM2-360M Q4_0, 3 threads | 14.08 | 9.80 |
+| SmolLM2-360M Q4_0, 4 threads | 18.26 | 11.51 |
+
+- **`-t 3` (generation threads).** On its own, generation is fastest at 4 threads, but in the voice loop Piper synthesizes the answer while it is still being generated. With 4 threads, one of llama.cpp's threads shared a core with Piper, and since all four wait for each other at every step, generation fell to 3.48 tokens/s. Three threads leave Piper (`--tts-threads 1`) a core of its own.
+- **`-tb 4` (prompt threads).** Prompts are processed while Piper is idle (the filler line is pre-rendered), so they get all four cores, 29% faster than three.
+- **`-np 1` (one slot).** Recent llama-server builds run several slots by default, and each slot keeps its own prompt cache. With several, a question that arrived during the startup warmup ran in a second slot beside it: neither could reuse the other's cache, both processed their ~550-token prompts from scratch, and they split the CPU (32.5 s to the first sentence). `LlamaCppBackend` also pins every request to slot 0 (`id_slot`), so this holds even without the flag. A request for a busy slot waits for it.
+- **Q8_0, not Q4_0.** Q4_0 is only 6–14% faster here (these cores are limited by arithmetic, not memory reads), not enough to justify the quality loss of 4 bits on a 360M model.
+
+Prompt processing is barely faster than generation on these cores (17 vs 10 tokens/s; elsewhere it's usually 10x or more), so every prompt token the cache doesn't cover costs ~60 ms. A full prompt for a description question is 548 tokens; about 281 of them (system prompt + SPECIES FACTS) are shared with every other description question, and the snippets plus the question (~265 tokens, ~15 s uncached) change with each question.
+
+**Start this before `full_roboranger_run.py`.** Startup sends the server two prefill-only requests (`max_tokens=1`): one while the camera is being aimed, carrying the real system prompt — that is what makes llama.cpp load its weights and cache the prefix — and one for the identified species' system prompt + SPECIES FACTS (287 tokens), which runs while the announcement plays. If the server isn't reachable, the run prints `warn: LLM prewarm: …` and carries on; the first visitor question then pays the model load.
 
 ### 4. Benchmark the classifier on the device
 
@@ -478,6 +498,33 @@ With this model, the previous fixed 0.55 threshold gives 87.7% precision / 63.5%
 3. **Apply.** Copy `corpus.db` → `corpus.new.db`. Per species: `DELETE FROM chunk_vectors WHERE species_id = ?`, delete its chunks and species row, insert the new ones — with the partition key this only touches that species' vector chunks. Then `refresh_manifest`, require `content_sha256` to equal the expected value, run `check_corpus_schema` plus one KNN per changed species, and swap.
 4. **Rollback.** Two slots: `corpus.db` (active) and `corpus.prev.db` (last known good). The swap is an atomic `os.replace` after verification; if startup checks fail or the loop crashes repeatedly, the device restores `corpus.prev.db`. Models ship the same way, and because temperature and threshold live in the model's manifest, a model update can't leave a stale calibration behind.
 5. **Version reporting.** Units upload `device_status.json` when online; the server plans the next delta from the reported `content_sha256`, not from the build date.
+
+---
+
+## Future work
+
+**Where the time goes now.** Two LLM questions about the red-shouldered hawk on the UNO Q, with llama-server at `-t 3 -tb 4 -np 1`. Times are from button-up, except the two LLM rows, which start at the LLM request:
+
+| | 1st question (asked during the species warmup) | 2nd question (warm cache) |
+|---|---|---|
+| Speech-to-text (`stt`) | 3.0 s | 0.8 s |
+| Gate + retrieval | 1.5 s | 0.6 s |
+| Filler line starts (`first_audio`) | 4.6 s | 1.4 s |
+| First sentence generated (`llm_first_sentence`) | 22.2 s | 10.1 s |
+| LLM done (`llm`) | 27.6 s | 15.5 s |
+| First sentence heard (`first_answer`) | 36.9 s | 21.2 s |
+| End of speech (`total_voice`) | 55.1 s | 39.6 s |
+
+For comparison, the first streaming run took 34.9 s to the first sentence heard and 39.7 s of generation, and before streaming the visitor heard nothing until the whole answer had been generated and synthesized. The items below are ordered by the time they should save.
+
+1. **Synthesizing the first sentence (~10 s).** On the 2nd question the first sentence was ready after 11.4 s but heard at 21.2 s: Piper runs on its one-thread session while the LLM is still generating, and a long first sentence takes about as long to synthesize as to play. Options: use the all-core session for the first sentence, accepting slower generation while the visitor is waiting on audio anyway; split a long first sentence at a clause boundary (comma) so speech starts after the first clause; measure `--tts-threads 2` together with `llama-server -t 2`.
+2. **Snippet prompt processing (~15 s per new question).** The snippets plus the question are about 265 of a 548-token prompt, and the cache can't cover them because they change with every question. At 13–18 tokens/s that's ~15 s before generation starts. Try `MAX_CHUNKS` 3 → 2 and `MAX_CHARS_PER_CHUNK` 400 → 250 in `prompt_builder.py`, checked with `tests/eval_e2e.py` for answer quality.
+3. **Fixed order for SPECIES FACTS (~10 s for non-description LLM questions).** The facts are reordered by intent, so only description-type questions reuse the 281 warmed tokens; the rest reuse only the system prompt (116 tokens). A fixed order would let every LLM question reuse the warmup. The intent-led order was a deliberate choice for a 360M model, so this needs the same quality check.
+4. **Startup and the first question.** Importing torch takes 27.5 s of the ~43 s `pipeline-prewarm` on the device, which delays the species warmup. A visitor who asks right away waits behind it (22.2 s to the first sentence on the 1st question against 10.1 s on the 2nd), and the overlap also slowed speech-to-text and retrieval. Running bge-small through onnxruntime (already installed for Piper) instead of sentence-transformers would avoid the torch import, and probably speed up each encode (~250 ms now). It must reproduce the corpus vectors: check cosine parity against `sentence-transformers` before switching.
+5. **Number abbreviations in speech.** Piper splits "Symphony No. 5." into two clips, "…No." and "5.", with a pause between them. Expand "No. <digit>" (and similar) to words before synthesis.
+6. **`voice_loop.py` parity.** It still uses the old blocking `speak()`. Move `Speaker` and `Session` into a shared module so both entry points stream.
+7. **Barge-in.** Pressing the button while the robot is talking should stop playback and start recording.
+8. **To verify on the device:** the memory cost of the second Piper session (`print_total_rss` at voice-loop start), and Whisper transcripts at `--whisper-audio-ctx 256` (on the laptop's test clip it turned "Push-To-Talk" into "push-to-tot"; the device transcripts in these runs were correct).
 
 ---
 

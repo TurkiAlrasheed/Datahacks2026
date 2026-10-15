@@ -144,15 +144,24 @@ class StreamingStubLLM(StubLLM):
         self.deltas = deltas
         self.events = events
         self.fail_after: int | None = None
+        self.closed_after: int | None = None   # deltas yielded when closed
 
     def stream(self, messages: list[dict], *,
                max_tokens: int | None = None):
         self.calls.append(messages)
-        for i, delta in enumerate(self.deltas):
-            if self.fail_after is not None and i == self.fail_after:
-                raise RuntimeError("stream broke")
-            self.events.append(("delta", i))
-            yield delta
+        self.closed_after = None
+        yielded = 0
+        try:
+            for i, delta in enumerate(self.deltas):
+                if self.fail_after is not None and i == self.fail_after:
+                    raise RuntimeError("stream broke")
+                self.events.append(("delta", i))
+                yielded += 1
+                yield delta
+        except GeneratorExit:
+            # What closes the HTTP response in the real backends.
+            self.closed_after = yielded
+            raise
 
 
 class FixedClassifier:
@@ -478,6 +487,22 @@ def main() -> int:
     check("warmup_prompt returns messages without calling the LLM",
           msgs is not None and len(llm.calls) == 1 and "retrieval" in split,
           str(split))
+    # The warmup prefills only what every description question shares: the
+    # system prompt + SPECIES FACTS, a strict prefix of a real prompt.
+    if wildlife_query is not None:
+        pipeline.intent_classifier = FixedClassifier(Intent.IDENTIFICATION)
+        pipeline.retrieval_threshold = -1.0
+        llm.calls.clear()
+        pipeline.answer("Test_species", wildlife_query)
+        real = llm.calls[-1]
+        check("warmup prompt is the system prompt + SPECIES FACTS only",
+              msgs[0] == real[0]
+              and msgs[1]["content"].startswith("SPECIES FACTS:")
+              and "SNIPPETS" not in msgs[1]["content"], str(msgs))
+        check("warmup prompt is a prefix of a real question's prompt",
+              real[1]["content"].startswith(msgs[1]["content"] + "\n\n"))
+        pipeline.intent_classifier = real_classifier
+        pipeline.retrieval_threshold = 0.50
     llm.should_raise = True
     timings = pipeline.warmup("Test_species")
     check("LLM failure reported, not raised", "error" in timings,
@@ -494,6 +519,14 @@ def main() -> int:
     sentences, rest = split_complete_sentences("It measures 25.")
     check("a boundary at the end of a stream buffer waits for more text",
           sentences == [] and rest == "It measures 25.", f"{sentences}")
+    sentences, rest = split_complete_sentences(
+        "It is like Symphony No. 5. It weighs approx. 3 kg. It ")
+    check("'No. 5' and 'approx. 3' are not sentence ends",
+          sentences == ["It is like Symphony No. 5.", "It weighs approx. 3 kg."]
+          and rest == " It ", f"{sentences} / {rest!r}")
+    sentences, rest = split_complete_sentences("Symphony No. ")
+    check("a period followed only by whitespace so far waits",
+          sentences == [] and rest == "Symphony No. ", f"{sentences}")
     for text, want in (
         ("It eats seeds. The song sparrow is known for",
          "It eats seeds."),
@@ -519,6 +552,12 @@ def main() -> int:
         check("trailing fragment dropped", resp.text == "First sentence.",
               resp.text)
         check("backend without stream(): not streamed", not resp.streamed)
+        llm.response = "It is small. SPECIES FACTS:\n- appearance: x."
+        resp = pipeline.answer("Test_species", wildlife_query)
+        check("non-streamed answer is cut where it starts copying the prompt",
+              resp.text == "It is small." and resp.path == "blurb_plus_chunks"
+              and "copied its prompt" in (resp.error or ""),
+              f"{resp.path} {resp.text!r} {resp.error}")
         llm.response = "stub response"
 
     print("\n=== test 14: streaming hands over sentences as generated ===")
@@ -560,6 +599,33 @@ def main() -> int:
               [e[1] for e in events if e[0] == "sentence"] == ["One.", "Two."],
               str(events))
 
+        # Soft limit: end at the first sentence boundary after N deltas and
+        # close the stream so the server stops generating.
+        events.clear()
+        streaming.deltas = ["One", " two", " three.", " Four", " five", " six.",
+                            " Seven", " eight.", " Nine", " ten"]
+        pipeline.stream_soft_token_limit = 5
+        resp = pipeline.answer("Test_species", wildlife_query,
+                               on_sentence=lambda s: events.append(
+                                   ("sentence", s)))
+        spoken = [e[1] for e in events if e[0] == "sentence"]
+        check("soft limit: stops at the first sentence end after 5 deltas",
+              spoken == ["One two three.", "Four five six."]
+              and resp.text == "One two three. Four five six.",
+              f"{spoken} / {resp.text!r}")
+        check("soft limit: stream closed right there, rest never generated",
+              streaming.closed_after == 7, f"closed_after={streaming.closed_after}")
+        pipeline.stream_soft_token_limit = None
+        events.clear()
+        pipeline.answer("Test_species", wildlife_query,
+                        on_sentence=lambda s: events.append(("sentence", s)))
+        check("no soft limit: reads to the end, drops the cut-off fragment",
+              [e[1] for e in events if e[0] == "sentence"]
+              == ["One two three.", "Four five six.", "Seven eight."]
+              and streaming.closed_after is None,
+              f"{events} closed_after={streaming.closed_after}")
+        pipeline.stream_soft_token_limit = 60
+
     print("\n=== test 15: no filler or streaming on the direct route ===")
     if wildlife_query is None:
         print("  [SKIP]")
@@ -598,6 +664,52 @@ def main() -> int:
               and not resp.streamed and events == [],
               f"{resp.path} {resp.text!r}")
         streaming.fail_after = None
+
+    print("\n=== test 16b: the model copies its prompt ===")
+    if wildlife_query is None:
+        print("  [SKIP]")
+    else:
+        # Medium-confidence DESCRIPTION: goes to the LLM (not direct-routed)
+        # but has a blurb formatter to fall back on.
+        pipeline.intent_classifier = FixedClassifier(Intent.DESCRIPTION,
+                                                     "medium", 0.5)
+        streaming.deltas = ["SPECIES FACTS:\nSpecies: Test Critter\n",
+                            "- appearance: A small lizard.", " - size: 10",
+                            " cm\n- habitat: Rocks."]
+        events.clear()
+        resp = pipeline.answer("Test_species", wildlife_query,
+                               on_sentence=lambda s: events.append(s))
+        said = [e for e in events if isinstance(e, str)]
+        check("an answer that only copies the prompt is never spoken",
+              said == [] and not resp.streamed, str(said))
+        check("falls back to the blurb description (llm_error path)",
+              resp.path == "llm_error" and "spiny lizard" in resp.text
+              and "copied its prompt" in (resp.error or ""),
+              f"{resp.path} {resp.text!r} {resp.error}")
+        check("the stream is closed at the copied sentence",
+              streaming.closed_after is not None
+              and streaming.closed_after < len(streaming.deltas),
+              f"closed_after={streaming.closed_after}")
+
+        streaming.deltas = ["It basks on rocks. ", "Species: Test Critter\n",
+                            "- habitat: Rocks. More"]
+        events.clear()
+        resp = pipeline.answer("Test_species", wildlife_query,
+                               on_sentence=lambda s: events.append(s))
+        said = [e for e in events if isinstance(e, str)]
+        check("a copy after a real sentence: keep the sentence, stop there",
+              said == ["It basks on rocks."]
+              and resp.text == "It basks on rocks." and resp.streamed
+              and resp.path == "blurb_plus_chunks", f"{said} {resp.path}")
+
+        # No blurb formatter for IDENTIFICATION: apologise instead.
+        pipeline.intent_classifier = FixedClassifier(Intent.IDENTIFICATION)
+        streaming.deltas = []   # what a stop string at the start leaves
+        resp = pipeline.answer("Test_species", wildlife_query,
+                               on_sentence=lambda s: None)
+        check("an empty answer falls back to MSG_LLM_ERROR",
+              resp.path == "llm_error" and resp.text == MSG_LLM_ERROR
+              and resp.error, f"{resp.path} {resp.text!r} {resp.error}")
 
     print("\n=== test 17: gate and intent share one query encode ===")
     pipeline.llm = llm

@@ -13,7 +13,10 @@ as soon as it is complete). Sampling params are pinned identically on both
 so cross-environment differences come from the runtime, not the sampler.
 `max_tokens` overrides the shared cap for one call — used by
 pipeline_factory.prewarm_components() to send a 1-token request that makes
-the server load its weights and cache the system prompt.
+the server load its weights and cache the system prompt. `stop` (constructor)
+lists strings that end generation as soon as the model writes one;
+pipeline_factory passes prompt_builder.PROMPT_HEADINGS, so a model that
+starts copying its prompt is cut off by the server.
 
 This module deliberately has no dependencies on any other RoboRanger
 module — anything that needs an LLM client can import from here without
@@ -24,7 +27,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
-from typing import Iterator
+from typing import Iterator, Sequence
 
 
 # Shared sampling params. Pin these on both backends so cross-environment
@@ -47,23 +50,28 @@ class OllamaBackend:
     name = "ollama"
 
     def __init__(self, model: str = "smollm2:360m",
-                 host: str = "http://localhost:11434") -> None:
+                 host: str = "http://localhost:11434",
+                 stop: Sequence[str] | None = None) -> None:
         self.model = model
         self.host = host
+        self.stop = list(stop) if stop else None
 
     def _request(self, messages: list[dict], max_tokens: int | None,
                  stream: bool) -> urllib.request.Request:
+        options = {
+            "temperature": SAMPLING["temperature"],
+            "top_p": SAMPLING["top_p"],
+            "top_k": SAMPLING["top_k"],
+            "seed": SAMPLING["seed"],
+            "num_predict": max_tokens or SAMPLING["max_tokens"],
+        }
+        if self.stop:
+            options["stop"] = self.stop
         body = json.dumps({
             "model": self.model,
             "messages": messages,
             "stream": stream,
-            "options": {
-                "temperature": SAMPLING["temperature"],
-                "top_p": SAMPLING["top_p"],
-                "top_k": SAMPLING["top_k"],
-                "seed": SAMPLING["seed"],
-                "num_predict": max_tokens or SAMPLING["max_tokens"],
-            },
+            "options": options,
         }).encode()
         return urllib.request.Request(
             f"{self.host}/api/chat",
@@ -99,21 +107,32 @@ class OllamaBackend:
 class LlamaCppBackend:
     """
     Talks to llama.cpp's OpenAI-compatible /v1/chat/completions endpoint.
-    Start the server on the Uno Q with:
+    Start the server on the Uno Q with (see onDeviceAgentREADME.md):
         ./llama-server -m smollm2-360m-q8_0.gguf --host 0.0.0.0 --port 8080 \
-                       --ctx-size 2048 --threads 4 --chat-template chatml
+                       --ctx-size 4096 -t 3 -tb 4 -np 1 --chat-template chatml
+
+    Every request is pinned to one server slot (`slot`, default 0).
+    llama-server runs several slots by default, and a slot is also its
+    prompt cache: unpinned, a question that arrives during the startup
+    warmup lands in a different slot, prefills its whole prompt from scratch
+    and splits the CPU with the warmup. Pinned, the server defers it until
+    the slot is free, then reuses the prefix the warmup cached. None leaves
+    slot choice to the server.
     """
 
     name = "llama-cpp"
 
     def __init__(self, host: str = "http://localhost:8080",
-                 model: str = "smollm2") -> None:
+                 model: str = "smollm2", slot: int | None = 0,
+                 stop: Sequence[str] | None = None) -> None:
         self.host = host
         self.model = model
+        self.slot = slot
+        self.stop = list(stop) if stop else None
 
     def _request(self, messages: list[dict], max_tokens: int | None,
                  stream: bool) -> urllib.request.Request:
-        body = json.dumps({
+        body = {
             "model": self.model,
             "messages": messages,
             "stream": stream,
@@ -126,10 +145,14 @@ class LlamaCppBackend:
             # prompt + SPECIES FACTS the startup warmup already processed).
             # Default on in current llama-server; explicit for older builds.
             "cache_prompt": True,
-        }).encode()
+        }
+        if self.slot is not None:
+            body["id_slot"] = self.slot
+        if self.stop:
+            body["stop"] = self.stop
         return urllib.request.Request(
             f"{self.host}/v1/chat/completions",
-            data=body,
+            data=json.dumps(body).encode(),
             headers={"Content-Type": "application/json"},
         )
 

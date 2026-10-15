@@ -106,6 +106,11 @@ class TestOllama:
         assert body["stream"] is True
         assert body["messages"] == MESSAGES
 
+    def test_stop_strings_sent(self, server):
+        OllamaBackend(model="m", host=server.url,
+                      stop=("SPECIES FACTS:",)).generate(MESSAGES)
+        assert server.requests[0][1]["options"]["stop"] == ["SPECIES FACTS:"]
+
     def test_stream_max_tokens_override(self, server):
         backend = OllamaBackend(model="m", host=server.url)
         list(backend.stream(MESSAGES, max_tokens=7))
@@ -129,11 +134,40 @@ class TestLlamaCpp:
         assert body["cache_prompt"] is True
         assert body["max_tokens"] == SAMPLING["max_tokens"]
 
+    def test_requests_pinned_to_slot_zero_by_default(self, server):
+        backend = LlamaCppBackend(host=server.url, model="m")
+        backend.generate(MESSAGES)
+        list(backend.stream(MESSAGES))
+        assert [body["id_slot"] for _, body in server.requests] == [0, 0]
+
+    def test_stop_strings_sent(self, server):
+        LlamaCppBackend(host=server.url, model="m",
+                        stop=("SPECIES FACTS:",)).generate(MESSAGES)
+        LlamaCppBackend(host=server.url, model="m").generate(MESSAGES)
+        assert server.requests[0][1]["stop"] == ["SPECIES FACTS:"]
+        assert "stop" not in server.requests[1][1]
+
+    def test_slot_none_leaves_choice_to_server(self, server):
+        backend = LlamaCppBackend(host=server.url, model="m", slot=None)
+        backend.generate(MESSAGES)
+        assert "id_slot" not in server.requests[0][1]
+
     def test_stream_yields_deltas_and_stops_at_done(self, server):
         backend = LlamaCppBackend(host=server.url, model="m")
         assert list(backend.stream(MESSAGES)) == ["It eats", " seeds."]
         _, body = server.requests[0]
         assert body["stream"] is True and body["cache_prompt"] is True
+
+    def test_closing_the_stream_closes_the_connection(self, server):
+        # The pipeline stops reading early (a long enough answer) and calls
+        # close(); the HTTP response must be released so the server sees the
+        # disconnect and stops generating.
+        backend = LlamaCppBackend(host=server.url, model="m")
+        deltas = backend.stream(MESSAGES)
+        assert next(deltas) == "It eats"
+        resp = deltas.gi_frame.f_locals["resp"]
+        deltas.close()
+        assert resp.closed
 
     def test_stream_error_event_raises(self, server):
         server.replies[("/v1/chat/completions", True)] = _sse(

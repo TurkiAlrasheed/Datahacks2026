@@ -6,8 +6,9 @@ Times the exact call the voice loop makes: pywhispercpp's Model.transcribe()
 on a float32 array (transcribe() in full_roboranger_run.py). For each
 (--threads, --audio-ctx) configuration it loads a fresh model and reports:
     load     ggml file -> whisper context
-    first    the first transcribe after load. The runtime never warms
-             Whisper, so a visitor's first question pays this.
+    first    the first transcribe after load. full_roboranger_run.py pays
+             this on its whisper-load thread (one second of silence), so
+             a visitor's first question doesn't.
     steady   p50 / min / max over --runs further calls
     RTF      steady p50 / clip length (below 1.0 = faster than real time)
     heard    the transcript, so a faster setting that changes it shows up

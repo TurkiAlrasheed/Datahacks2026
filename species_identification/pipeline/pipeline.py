@@ -62,7 +62,9 @@ for _sub in ("tests", "llm-tuning", "pipeline", "."):
 
 from blurb_store import BlurbStore  # noqa: E402
 from intent import Intent, IntentClassifier, IntentResult  # noqa: E402
-from prompt_builder import Blurb, Chunk, build_messages  # noqa: E402
+from prompt_builder import (FACT_LABELS, PROMPT_HEADINGS,  # noqa: E402
+                            Blurb, Chunk, build_messages,
+                            build_prefix_messages)
 from test_corpus import l2_to_cosine, retrieve  # noqa: E402
 from wildlife_gate import GateResult, WildlifeGate  # noqa: E402
 
@@ -87,6 +89,14 @@ OPEN_ENDED_PREFIXES = ("tell me about", "tell me more about")
 # How many chunks to ask the retriever for. We may keep fewer after the
 # threshold filter, and the prompt builder caps further at MAX_CHUNKS.
 RETRIEVAL_K = 5
+
+# When streaming, end the answer at the first sentence boundary after this
+# many streamed deltas (llama.cpp and Ollama send about one token each) and
+# close the stream, which makes the server stop generating. The 100-token
+# max_tokens cap usually cuts a third sentence mid-way, and that fragment is
+# dropped anyway: on the UNO Q (~3.5-10 tokens/s) it cost up to ~10 s of
+# generation, competing with speech synthesis for the CPU.
+STREAM_SOFT_TOKEN_LIMIT = 60
 
 # User-facing fallback messages. Kept short and visitor-friendly. These
 # are what the user sees when the pipeline can't or won't call the LLM.
@@ -148,24 +158,40 @@ def _is_abbreviation(text: str, dot: int) -> bool:
     return (len(last) == 1 and last.isalpha()) or word.lower() in _ABBREVIATIONS
 
 
+# Whitespace, then the first character of whatever follows a boundary.
+_NEXT_CHAR = re.compile(r"\s*(\S)")
+
+
 def _sentence_ends(text: str) -> Iterator[int]:
-    """Offsets just past each sentence-ending punctuation run in text."""
+    """
+    Offsets just past each sentence-ending punctuation run that more text
+    follows. The next sentence must already have started: a period whose
+    next word begins with a lowercase letter or a digit isn't a sentence
+    end ("Symphony No. 5", "approx. 3 cm", "e.g. seeds"), and neither is one
+    whose next character hasn't been generated yet.
+    """
     for m in _SENTENCE_END.finditer(text):
-        if m.group()[0] != "." or not _is_abbreviation(text, m.start()):
-            yield m.end()
+        nxt = _NEXT_CHAR.match(text, m.end())
+        if nxt is None:
+            continue   # end of text, or only whitespace so far
+        if m.group()[0] == "." and (nxt.group(1).islower()
+                                    or nxt.group(1).isdigit()
+                                    or _is_abbreviation(text, m.start())):
+            continue
+        yield m.end()
 
 
 def split_complete_sentences(text: str) -> tuple[list[str], str]:
     """
     Split off the sentences that are definitely finished, for streaming.
-    Returns (sentences, rest). A boundary at the very end of `text` is left
-    in `rest`, because more tokens may still be coming ("25." -> "25.4").
+    Returns (sentences, rest). A sentence counts as finished once the next
+    one has visibly started, so a boundary at the end of `text` stays in
+    `rest`: more tokens may still be coming ("25." -> "25.4", "No." ->
+    "No. 5").
     """
     sentences: list[str] = []
     start = 0
     for end in _sentence_ends(text):
-        if end == len(text):
-            break
         sentence = text[start:end].strip()
         if sentence:
             sentences.append(sentence)
@@ -184,6 +210,33 @@ def trim_incomplete_sentence(text: str) -> str:
         return text
     ends = list(_sentence_ends(text))
     return text[:ends[-1]] if ends else text
+
+
+# Prompt scaffolding in an answer means the model is copying its prompt
+# instead of answering: a section heading, the "Species: ..." header line,
+# or a "- habitat: ..." fact line.
+_PROMPT_ECHO = re.compile(
+    "|".join(re.escape(h) for h in PROMPT_HEADINGS)
+    + r"|^\s*Species:"
+    + r"|^\s*-\s*(?:" + "|".join(map(re.escape, FACT_LABELS)) + r")\s*:",
+    re.MULTILINE,
+)
+
+
+def _echoes_prompt(sentence: str) -> bool:
+    return _PROMPT_ECHO.search(sentence) is not None
+
+
+def _cut_prompt_echo(text: str) -> tuple[str, bool]:
+    """Cut a whole answer before its first sentence that copies the prompt.
+    Returns (text, whether anything was cut)."""
+    sentences, rest = split_complete_sentences(text)
+    if rest.strip():
+        sentences.append(rest.strip())
+    for i, sentence in enumerate(sentences):
+        if _echoes_prompt(sentence):
+            return " ".join(sentences[:i]), True
+    return text, False
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +265,9 @@ ResponsePath = Literal[
     "blurb_direct",
     "blurb_only",
     "blurb_plus_chunks",
+    # The LLM failed before a usable sentence (server error, empty answer,
+    # or it only copied its prompt). Text is the blurb-field answer when the
+    # intent has a formatter, else MSG_LLM_ERROR.
     "llm_error",
 ]
 
@@ -264,6 +320,7 @@ class RoboRangerPipeline:
         blurb_store: BlurbStore | None = None,
         retrieval_threshold: float = DEFAULT_RETRIEVAL_THRESHOLD,
         retrieval_k: int = RETRIEVAL_K,
+        stream_soft_token_limit: int | None = STREAM_SOFT_TOKEN_LIMIT,
     ) -> None:
         self.embedder = embedder
         self.db_conn = db_conn
@@ -278,6 +335,8 @@ class RoboRangerPipeline:
         self.blurb_store = blurb_store or BlurbStore(db_conn)
         self.retrieval_threshold = retrieval_threshold
         self.retrieval_k = retrieval_k
+        # None = stream until the server stops (max_tokens or end of answer).
+        self.stream_soft_token_limit = stream_soft_token_limit
 
     # -- the main entry point ------------------------------------------------
 
@@ -427,7 +486,8 @@ class RoboRangerPipeline:
 
         # 6. LLM call. Failures here should be visible (logged) but
         # recoverable from the user's perspective. The answer is cut back to
-        # its last complete sentence: max_tokens stops generation mid-word.
+        # its last complete sentence (max_tokens stops generation mid-word)
+        # and ends before any sentence that copies the prompt.
         if on_llm_start is not None:
             on_llm_start()
         stream = getattr(self.llm, "stream", None) if on_sentence else None
@@ -436,33 +496,39 @@ class RoboRangerPipeline:
         t = time.perf_counter()
         try:
             if stream is None:
-                text = trim_incomplete_sentence(self.llm.generate(messages))
+                text, echoed = _cut_prompt_echo(
+                    trim_incomplete_sentence(self.llm.generate(messages)))
             else:
-                text = self._stream_sentences(stream(messages), on_sentence,
-                                              spoken, latency, t)
+                text, echoed = self._stream_sentences(
+                    stream(messages), on_sentence, spoken, latency, t)
+            if echoed:
+                error = "LLM copied its prompt; answer cut where that began"
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
-            if not spoken:
-                latency["llm"] = time.perf_counter() - t
-                latency["total"] = time.perf_counter() - t0
-                return Response(
-                    text=MSG_LLM_ERROR,
-                    path="llm_error",
-                    species_id=species_id,
-                    query=query,
-                    gate=gate_result,
-                    intent=intent_result,
-                    blurb=blurb,
-                    chunks_used=chunks,
-                    chunks_dropped=dropped,
-                    error=error,
-                    latency=latency,
-                )
-            # Part of the answer has already been spoken; that part is the
-            # answer the visitor got.
+            # Whatever was already spoken is the answer the visitor got.
             text = " ".join(spoken)
         latency["llm"] = time.perf_counter() - t
         latency["total"] = time.perf_counter() - t0
+
+        if not text:
+            # Nothing usable: the call failed before the first sentence, or
+            # the model returned nothing or only copied its prompt (the stop
+            # strings end such an answer at once). Answer from the blurb
+            # when the intent has a formatter, else apologise.
+            return Response(
+                text=(self._format_from_blurb(intent_result.intent, blurb)
+                      or MSG_LLM_ERROR),
+                path="llm_error",
+                species_id=species_id,
+                query=query,
+                gate=gate_result,
+                intent=intent_result,
+                blurb=blurb,
+                chunks_used=chunks,
+                chunks_dropped=dropped,
+                error=error or "LLM returned no usable text",
+                latency=latency,
+            )
 
         path: ResponsePath = "blurb_plus_chunks" if chunks else "blurb_only"
         return Response(
@@ -484,13 +550,21 @@ class RoboRangerPipeline:
                       ) -> tuple[list[dict] | None, dict[str, float | str]]:
         """
         The cheap half of warmup: gate + intent embedding, the species'
-        partition KNN, and prompt assembly. Returns (messages, timings), or
-        (None, {"error": ...}) if the species isn't in the corpus.
+        partition KNN, and the prompt to prefill. Returns (messages,
+        timings), or (None, {"error": ...}) if the species isn't in the
+        corpus.
+
+        The messages are only the prefix every description question shares
+        (build_prefix_messages: system prompt + SPECIES FACTS in DESCRIPTION
+        order). Snippets and the question differ per question, so
+        prefilling them would only lengthen the warmup: about half of a
+        full prompt, at ~60 ms per token on the UNO Q. The KNN still runs,
+        to warm that code path and the species' pages.
 
         Split out from warmup() so a caller can run this on the thread that
         owns the sqlite connection and then push the LLM prefill onto
-        another thread (full_roboranger_run.py overlaps it with speaking the
-        identification).
+        another thread (full_roboranger_run.py runs both on its own
+        llm-warm thread with its own connection).
         """
         timings: dict[str, float | str] = {}
         blurb = self.blurb_store.get(species_id)
@@ -504,13 +578,11 @@ class RoboRangerPipeline:
         timings["embed"] = time.perf_counter() - t
 
         t = time.perf_counter()
-        chunks, _ = self._retrieve_filtered(species_id, query)
+        self._retrieve_filtered(species_id, query)
         timings["retrieval"] = time.perf_counter() - t
 
-        messages = build_messages(
-            query=query,
+        messages = build_prefix_messages(
             blurb=blurb,
-            chunks=chunks,
             intent_result=IntentResult(Intent.DESCRIPTION, "high", 1.0, 1.0,
                                        {}),
         )
@@ -564,35 +636,61 @@ class RoboRangerPipeline:
         and components built on another model don't qualify."""
         return getattr(component, "embedder", None) is self.embedder
 
-    @staticmethod
-    def _stream_sentences(deltas: Iterator[str],
+    def _stream_sentences(self, deltas: Iterator[str],
                           on_sentence: Callable[[str], None],
                           spoken: list[str],
                           latency: dict[str, float],
-                          t_start: float) -> str:
+                          t_start: float) -> tuple[str, bool]:
         """
         Accumulate streamed text deltas and pass each complete sentence to
         on_sentence as soon as it is finished, appending it to `spoken` so
         the caller knows what was delivered if the stream fails midway.
-        At the end, a trailing fragment cut off by max_tokens is dropped
-        (same rule as trim_incomplete_sentence). Returns the full answer.
+
+        The answer ends early, with the stream closed (which makes the
+        server stop generating), at the first sentence that copies the
+        prompt (never spoken), or once a sentence ends after
+        stream_soft_token_limit deltas (the start of the next one is
+        dropped). Otherwise a trailing fragment cut off by max_tokens is
+        dropped at the end (same rule as trim_incomplete_sentence).
+        Returns (answer, whether the model copied its prompt).
         """
+        limit = self.stream_soft_token_limit
         buf = ""
-        for delta in deltas:
-            buf += delta
-            sentences, buf = split_complete_sentences(buf)
-            for sentence in sentences:
-                if not spoken:
-                    latency["llm_first_sentence"] = time.perf_counter() - t_start
-                spoken.append(sentence)
-                on_sentence(sentence)
+        n_deltas = 0
+        try:
+            for delta in deltas:
+                n_deltas += 1
+                buf += delta
+                sentences, buf = split_complete_sentences(buf)
+                for sentence in sentences:
+                    if _echoes_prompt(sentence):
+                        return " ".join(spoken), True
+                    self._hand_over(sentence, on_sentence, spoken, latency,
+                                    t_start)
+                if sentences and limit is not None and n_deltas >= limit:
+                    return " ".join(spoken), False
+        finally:
+            # Closing the generator closes the HTTP response; an early
+            # return would otherwise leave the server generating until
+            # max_tokens.
+            close = getattr(deltas, "close", None)
+            if close is not None:
+                close()
         tail = buf.strip()
+        if tail and _echoes_prompt(tail):
+            return " ".join(spoken), True
         if tail and (_TRAILING_END.search(tail) or not spoken):
-            if not spoken:
-                latency["llm_first_sentence"] = time.perf_counter() - t_start
-            spoken.append(tail)
-            on_sentence(tail)
-        return " ".join(spoken)
+            self._hand_over(tail, on_sentence, spoken, latency, t_start)
+        return " ".join(spoken), False
+
+    @staticmethod
+    def _hand_over(sentence: str, on_sentence: Callable[[str], None],
+                   spoken: list[str], latency: dict[str, float],
+                   t_start: float) -> None:
+        if not spoken:
+            latency["llm_first_sentence"] = time.perf_counter() - t_start
+        spoken.append(sentence)
+        on_sentence(sentence)
 
     def _retrieve_filtered(
         self, species_id: str, query: str,

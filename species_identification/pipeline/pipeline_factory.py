@@ -60,14 +60,20 @@ class Components:
 def make_backend(backend: Literal["ollama", "llama-cpp"] = "ollama",
                  model: str = "smollm2:360m",
                  backend_host: str | None = None):
-    """Construct an LLM backend adapter (no network traffic yet)."""
+    """
+    Construct an LLM backend adapter (no network traffic yet). The prompt's
+    section headings are stop strings, so a model that starts copying its
+    prompt ("SPECIES FACTS: ...") is cut off by the server at once.
+    """
     from llm_backends import LlamaCppBackend, OllamaBackend
+    from prompt_builder import PROMPT_HEADINGS
     if backend == "ollama":
         return OllamaBackend(model=model,
-                             host=backend_host or "http://localhost:11434")
+                             host=backend_host or "http://localhost:11434",
+                             stop=PROMPT_HEADINGS)
     if backend == "llama-cpp":
         return LlamaCppBackend(host=backend_host or "http://localhost:8080",
-                               model=model)
+                               model=model, stop=PROMPT_HEADINGS)
     raise ValueError(f"unknown backend: {backend!r}")
 
 

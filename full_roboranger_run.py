@@ -24,11 +24,15 @@ the gate/intent centroids and the LLM weights all load on background
 threads while the camera is being aimed. The identification is announced
 the moment it is made, and the push-to-talk prompt follows the
 announcement: nothing is joined before it. The LLM prefill for the species
-runs in the background while the visitor presses the button and talks;
-Whisper is joined at the first transcription and the pipeline is built at
-the first question if its components were still loading. Only the corpus
-connection is built on the main thread, because sqlite3 connections are
-bound to their creating thread.
+runs on its own thread (with its own corpus connection, since sqlite3
+connections are bound to their creating thread) as soon as the components
+are loaded, while the visitor presses the button and talks. Whisper is
+joined at the first transcription and the pipeline is built at the first
+question.
+
+Speech synthesis is capped at --tts-threads (1) so that speaking an answer
+doesn't take cores from llama-server while it is still generating, and
+Whisper's encoder window is sized to each clip (--whisper-audio-ctx).
 
 Each answer is spoken while it is generated: the pipeline hands over every
 complete sentence as the LLM streams it, and a pre-rendered filler line
@@ -72,7 +76,9 @@ from __future__ import annotations
 import argparse
 import atexit
 import hashlib
+import inspect
 import json
+import math
 import platform
 import queue
 import shutil
@@ -84,7 +90,7 @@ import time
 import wave
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 import numpy as np
 
@@ -143,6 +149,17 @@ DTYPE = "int16"
 # double-tap of the button. Skip them rather than transcribing 80ms
 # of silence (which whisper will happily hallucinate words onto).
 MIN_UTTERANCE_SEC = 0.3
+
+# whisper.cpp pads every clip to a 30 s window (encoder context 1500, 50 per
+# second of audio), so a 2 s question costs as much to encode as a 30 s one.
+# transcribe() sizes the window to the clip instead: 50 per second plus a
+# margin, never below --whisper-audio-ctx. 256 (about 5 s) measured fastest
+# on the UNO Q: 0.69 s at 4 threads (species_identification/tests/
+# bench_stt.py).
+AUDIO_CTX_PER_SEC = 50
+AUDIO_CTX_PAD = 32
+AUDIO_CTX_MAX = 1500
+DEFAULT_MIN_AUDIO_CTX = 256
 
 
 # ---------------------------------------------------------------------------
@@ -359,13 +376,28 @@ def record_utterance() -> np.ndarray:
     return np.concatenate(chunks, axis=0).flatten()
 
 
-def transcribe(model: WhisperModel, audio: np.ndarray) -> str:
+def audio_ctx_for(n_samples: int, min_ctx: int) -> int:
+    """
+    Encoder context that covers a clip of n_samples: 50 per second plus a
+    margin, at least min_ctx, at most the full window. min_ctx <= 0 means
+    whisper's default (0, the full 30 s window).
+    """
+    if min_ctx <= 0:
+        return 0
+    need = math.ceil(n_samples / SAMPLE_RATE * AUDIO_CTX_PER_SEC) + AUDIO_CTX_PAD
+    return min(AUDIO_CTX_MAX, max(min_ctx, need))
+
+
+def transcribe(model: WhisperModel, audio: np.ndarray,
+               min_audio_ctx: int = 0) -> str:
     """
     Run whisper.cpp on an int16 mono array. pywhispercpp wants float32 in
-    [-1, 1], so convert. Returns the joined transcript, stripped.
+    [-1, 1], so convert. The encoder window is sized to the clip (see
+    audio_ctx_for). Returns the joined transcript, stripped.
     """
     audio_f32 = audio.astype(np.float32) / 32768.0
-    segments = model.transcribe(audio_f32)
+    segments = model.transcribe(
+        audio_f32, audio_ctx=audio_ctx_for(len(audio), min_audio_ctx))
     return " ".join(seg.text for seg in segments).strip()
 
 
@@ -389,6 +421,49 @@ FILLER_PHRASES = (
 )
 
 
+def piper_session(model_path: Path, threads: int):
+    """
+    An onnxruntime session for a Piper voice: `threads` intra-op threads
+    (0 = onnxruntime's default, one per core), and no spin-waiting between
+    ops, so idle workers don't burn cores other work could use.
+    """
+    import onnxruntime
+
+    opts = onnxruntime.SessionOptions()
+    if threads > 0:
+        opts.intra_op_num_threads = threads
+    opts.inter_op_num_threads = 1
+    opts.add_session_config_entry("session.intra_op.allow_spinning", "0")
+    return onnxruntime.InferenceSession(
+        str(model_path), sess_options=opts,
+        providers=["CPUExecutionProvider"])
+
+
+def load_piper_voice(model_path: Path, threads: int) -> PiperVoice:
+    """
+    PiperVoice.load() with its session from piper_session(threads).
+
+    piper builds the session with default options: one worker per core,
+    spin-waiting between ops. While an answer streams, synthesis then
+    competes with llama-server for the same four cores, and llama.cpp
+    stalls whenever one of its threads loses its core. Rebuilding the
+    session after load() would load the model twice (as long as the whole
+    load), so this mirrors load() for piper-tts 1.4 instead.
+    """
+    from piper.config import PiperConfig
+
+    with open(f"{model_path}.json", "r", encoding="utf-8") as fh:
+        config = PiperConfig.from_dict(json.load(fh))
+    espeak_dir = inspect.signature(PiperVoice.load).parameters[
+        "espeak_data_dir"].default
+    return PiperVoice(
+        config=config,
+        session=piper_session(model_path, threads),
+        espeak_data_dir=Path(espeak_dir),
+        download_dir=Path.cwd(),
+    )
+
+
 class Speaker:
     """
     Non-blocking text-to-speech. say() queues text and returns at once. A
@@ -396,12 +471,22 @@ class Speaker:
     in order, so sentence N+1 is synthesized while sentence N plays; the
     voice loop hands over sentences while the LLM is still generating.
 
+    Two onnxruntime sessions, picked per sentence: the voice's own (few
+    threads) while the LLM is generating, so synthesis leaves llama-server
+    its cores, and an all-core one (set_idle_session) the rest of the time:
+    the announcement, answers from the blurb, and whatever is left to say
+    once generation ends. One thread alone synthesizes no faster than real
+    time on the UNO Q.
+
     Only the synth thread touches the PiperVoice. Per-turn timings are
     measured from the reset_turn() timestamp (button-up).
     """
 
     def __init__(self, voice: PiperVoice) -> None:
         self.voice = voice
+        self._busy_session = voice.session
+        self._idle_session = None
+        self._llm_generating = threading.Event()
         self._synth_q: "queue.Queue[tuple[str, str]]" = queue.Queue()
         self._play_q: "queue.Queue[tuple[Path, str, bool]]" = queue.Queue()
         self._dir = Path(tempfile.mkdtemp(prefix="roboranger_tts_"))
@@ -429,6 +514,26 @@ class Speaker:
     def say_and_wait(self, text: str) -> None:
         self.say(text)
         self.wait()
+
+    def set_idle_session(self, session) -> None:
+        """Synthesize with `session` whenever the LLM isn't generating, from
+        the next sentence on. Safe from any thread (loaded in the
+        background at startup)."""
+        self._idle_session = session
+
+    @property
+    def has_idle_session(self) -> bool:
+        return self._idle_session is not None
+
+    def llm_started(self) -> None:
+        """answer()'s on_llm_start: switch to the few-thread session, since
+        llama-server is about to take its cores, and play the filler line."""
+        self._llm_generating.set()
+        self.play_filler()
+
+    def llm_finished(self) -> None:
+        """Generation is over: the rest of the answer can use every core."""
+        self._llm_generating.clear()
 
     def play_filler(self) -> None:
         """Queue the next filler line (see FILLER_PHRASES)."""
@@ -465,8 +570,18 @@ class Speaker:
         One WAV per sentence, each yielded as soon as it is synthesized:
         piper splits the text into sentences itself, so a long blurb answer
         starts playing after its first sentence instead of after all of it.
+        piper runs its session once per sentence as the generator advances,
+        so the session is picked again before each one.
         """
-        for chunk in self.voice.synthesize(text):
+        chunks = iter(self.voice.synthesize(text))
+        while True:
+            idle = self._idle_session
+            self.voice.session = (idle if idle is not None
+                                  and not self._llm_generating.is_set()
+                                  else self._busy_session)
+            chunk = next(chunks, None)
+            if chunk is None:
+                return
             self._clip_n += 1
             path = self._dir / f"clip_{self._clip_n}.wav"
             with wave.open(str(path), "wb") as wav_file:
@@ -616,25 +731,30 @@ class Session:
     actually needs it, so the visitor can press the button and talk while
     they finish loading.
 
-    Main thread only: the pipeline's sqlite connection is bound to the
-    thread that builds it. Background threads report through note(), and
-    the loop prints those lines between turns so they don't land in the
-    middle of the push-to-talk prompt.
+    pipeline() and transcribe() are main-thread only: the pipeline's sqlite
+    connection is bound to the thread that builds it. The species warmup
+    builds a pipeline of its own on its own thread. Background threads
+    report through note(), and the loop prints those lines between turns so
+    they don't land in the middle of the push-to-talk prompt.
     """
 
     def __init__(self, *, speaker: Speaker,
                  whisper_thread: threading.Thread,
                  prewarm_thread: threading.Thread,
                  background: dict, background_errors: dict,
-                 build_kwargs: dict) -> None:
+                 build_kwargs: dict, min_audio_ctx: int) -> None:
         self._speaker = speaker
         self._whisper_thread = whisper_thread
         self._prewarm_thread = prewarm_thread
         self._background = background
         self._errors = background_errors
         self._build_kwargs = build_kwargs
+        self._min_audio_ctx = min_audio_ctx
         self._pipeline: RoboRangerPipeline | None = None
         self._notes: "queue.Queue[str]" = queue.Queue()
+        # Set by the voice loop at the first button-up; the species warmup
+        # stands down once a real question is on its way.
+        self.question_started = threading.Event()
 
     def note(self, line: str) -> None:
         """Queue a log line from any thread; printed at the next turn."""
@@ -644,10 +764,8 @@ class Session:
         while not self._notes.empty():
             print(self._notes.get_nowait(), file=sys.stderr)
 
-    def components_ready(self) -> bool:
-        return not self._prewarm_thread.is_alive()
-
-    def whisper(self) -> WhisperModel:
+    def transcribe(self, audio: np.ndarray) -> str:
+        """Transcribe with Whisper, waiting for it to load if necessary."""
         if self._whisper_thread.is_alive():
             print("  waiting for whisper to finish loading...", flush=True)
         self._whisper_thread.join()
@@ -655,8 +773,71 @@ class Session:
             raise self._errors["whisper"]
         if "whisper_load_s" in self._background:  # first call only
             print(f"  whisper loaded in "
-                  f"{self._background.pop('whisper_load_s'):.1f}s")
-        return self._background["whisper"]
+                  f"{self._background.pop('whisper_load_s'):.1f}s, warmed in "
+                  f"{self._background.pop('whisper_warm_s', 0.0):.1f}s")
+        return transcribe(self._background["whisper"], audio,
+                          self._min_audio_ctx)
+
+    def start_species_warmup(self, species_id: str,
+                             on_done: Callable[[dict], None]) -> None:
+        """
+        Prefill the LLM with this species' prompt as soon as the prewarmed
+        components exist, however long that takes relative to
+        identification, so the first question finds the system prompt and
+        SPECIES FACTS already in llama-server's cache. Runs on its own
+        `llm-warm` thread with its own corpus connection (sqlite3
+        connections are bound to the thread that creates them), so neither
+        the main thread nor this thread ever waits for the other.
+
+        Stands down once a question has started: that question does the same
+        prefill, and a duplicate request would only queue in front of it on
+        the model server. on_done(warm) runs on the thread with the timings.
+        """
+        threading.Thread(target=self._warm_species, args=(species_id, on_done),
+                         name="llm-warm", daemon=True).start()
+
+    def _warm_species(self, species_id: str,
+                      on_done: Callable[[dict], None]) -> None:
+        warm: dict = {}
+        t0 = time.perf_counter()
+        try:
+            self._prewarm_thread.join()
+            components = self._background.get("components")
+            if components is None:
+                warm["skipped"] = "pipeline components failed to load"
+            elif self.question_started.is_set():
+                warm["skipped"] = "a question started first"
+            else:
+                pipeline = build_pipeline(**self._build_kwargs,
+                                          components=components)
+                try:
+                    messages, warm = pipeline.warmup_prompt(species_id)
+                    if messages is None:
+                        pass  # warm["error"] says why
+                    elif self.question_started.is_set():
+                        warm["skipped"] = "a question started first"
+                    else:
+                        t = time.perf_counter()
+                        error = pipeline.warm_llm(messages)
+                        warm["llm"] = time.perf_counter() - t
+                        if error:
+                            warm["error"] = error
+                finally:
+                    pipeline.db_conn.close()
+        except Exception as e:
+            warm["error"] = f"{type(e).__name__}: {e}"
+
+        if "error" in warm:
+            self.note(f"warn: species warmup: {warm['error']}")
+        elif "skipped" in warm:
+            self.note(f"  species warmup skipped: {warm['skipped']}")
+        else:
+            self.note(f"  species warmup done "
+                      f"{time.perf_counter() - t0:.1f}s after identification ("
+                      + ", ".join(f"{k}={v * 1000:.0f}ms"
+                                  for k, v in warm.items()
+                                  if isinstance(v, float)) + ")")
+        on_done(warm)
 
     def pipeline(self) -> RoboRangerPipeline:
         """The pipeline, built on first use from the prewarmed components
@@ -702,6 +883,9 @@ def voice_repl(session: Session, species_id: str, speaker: Speaker) -> int:
     via --species). To re-identify, restart the script.
     """
     print(f"\nvoice loop ready — species: {species_id}")
+    if not speaker.has_idle_session:
+        print("(all-core Piper session not loaded yet or disabled; "
+              "synthesis uses the few-thread one)")
     print("Ctrl-C to exit.\n")
 
     print_total_rss(label="voice loop start")
@@ -716,10 +900,11 @@ def voice_repl(session: Session, species_id: str, speaker: Speaker) -> int:
             # --- STT: speech in -------------------------------------------
             audio = record_utterance()
             t_up = time.perf_counter()  # button-up: every turn timing's zero
+            session.question_started.set()
             speaker.reset_turn(t_up)
             transcript = ""
             if len(audio) >= SAMPLE_RATE * MIN_UTTERANCE_SEC:
-                transcript = transcribe(session.whisper(), audio)
+                transcript = session.transcribe(audio)
             stt_s = time.perf_counter() - t_up
 
             # Empty / too-short / whisper-returned-nothing: don't run the
@@ -737,10 +922,13 @@ def voice_repl(session: Session, species_id: str, speaker: Speaker) -> int:
             # the LLM path it cues the filler line, then hands over each
             # sentence as it is generated so speech starts before the
             # answer is finished.
-            resp = session.pipeline().answer(
-                species_id, transcript,
-                on_llm_start=speaker.play_filler,
-                on_sentence=speaker.say)
+            try:
+                resp = session.pipeline().answer(
+                    species_id, transcript,
+                    on_llm_start=speaker.llm_started,
+                    on_sentence=speaker.say)
+            finally:
+                speaker.llm_finished()
 
             # --- TTS: speech out ------------------------------------------
             if not resp.streamed:
@@ -870,6 +1058,24 @@ def main() -> int:
                         "required unless --camera-test")
     p.add_argument("--whisper-threads", type=int, default=4,
                    help="threads for whisper.cpp (default: 4)")
+    p.add_argument("--whisper-audio-ctx", type=int,
+                   default=DEFAULT_MIN_AUDIO_CTX,
+                   help="smallest whisper.cpp encoder context; each clip "
+                        "gets 50 per second of audio + a margin, at least "
+                        f"this (default: {DEFAULT_MIN_AUDIO_CTX}, ~5 s). "
+                        "0 = whisper's full 30 s window for every clip")
+    p.add_argument("--tts-threads", type=int, default=1,
+                   help="onnxruntime threads for Piper while the LLM is "
+                        "generating (default: 1, so speaking an answer "
+                        "doesn't take cores from llama-server; 0 = every "
+                        "core)")
+    p.add_argument("--tts-idle-threads", type=int, default=0,
+                   help="Piper threads the rest of the time: the "
+                        "announcement, answers from the blurb, and speech "
+                        "left once generation ends (default: 0 = every "
+                        "core). A second session, loaded in the "
+                        "background; it holds another copy of the voice in "
+                        "memory. Equal to --tts-threads = one session")
     # Vision args.
     p.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL_DIR,
                    help="directory with model_*.tflite + "
@@ -956,10 +1162,12 @@ def main() -> int:
     # Load piper FIRST — we need to speak failure messages from the
     # classifier or pipeline build. Whisper comes after, since it's
     # only needed once the loop starts.
-    print("loading piper voice...", end=" ", flush=True)
+    print(f"loading piper voice ({args.tts_threads or 'all'} "
+          f"thread{'s' if args.tts_threads != 1 else ''} while the LLM "
+          f"generates)...", end=" ", flush=True)
     t = time.perf_counter()
     try:
-        voice = PiperVoice.load(str(args.voice))
+        voice = load_piper_voice(args.voice, args.tts_threads)
     except Exception as e:
         print()
         print(f"error: failed to load voice {args.voice}: {e}",
@@ -969,6 +1177,21 @@ def main() -> int:
     # All speech goes through the Speaker's threads from here on. While it
     # is idle it pre-renders the filler lines.
     speaker = Speaker(voice)
+
+    # The all-core session for when the LLM isn't generating loads in the
+    # background; until it's ready, the few-thread session does everything.
+    if args.tts_idle_threads != args.tts_threads:
+        def _load_idle_tts_bg():
+            try:
+                speaker.set_idle_session(
+                    piper_session(args.voice, args.tts_idle_threads))
+            except Exception as e:
+                print(f"warn: all-core Piper session failed to load ({e!r}); "
+                      f"synthesizing with {args.tts_threads} thread(s)",
+                      file=sys.stderr)
+
+        threading.Thread(target=_load_idle_tts_bg, name="tts-load",
+                         daemon=True).start()
 
     # --- Corpus preflight --------------------------------------------------
     # Seconds-cheap, and a stale (v1) or missing corpus would otherwise only
@@ -1009,9 +1232,20 @@ def main() -> int:
     def _load_whisper_bg():
         try:
             t = time.perf_counter()
-            background["whisper"] = WhisperModel(
-                str(args.whisper_model), n_threads=args.whisper_threads)
+            # print_progress=False silences whisper.cpp's "Progress: 0%"
+            # lines on every transcription.
+            model = WhisperModel(str(args.whisper_model),
+                                 n_threads=args.whisper_threads,
+                                 print_progress=False)
             background["whisper_load_s"] = time.perf_counter() - t
+            # The first transcription after a load is the slow one
+            # (bench_stt.py reports it as "first"); pay it here, on a second
+            # of silence, instead of on the visitor's first question.
+            t = time.perf_counter()
+            transcribe(model, np.zeros(SAMPLE_RATE, dtype=np.int16),
+                       args.whisper_audio_ctx)
+            background["whisper_warm_s"] = time.perf_counter() - t
+            background["whisper"] = model
         except BaseException as e:
             background_errors["whisper"] = e
 
@@ -1108,8 +1342,7 @@ def main() -> int:
     # The announcement plays on the Speaker's threads while the rest of this
     # runs, and the push-to-talk prompt follows it. Nothing here waits for a
     # background load: Whisper is joined at the first transcription, and the
-    # pipeline is built at the first question if its components are still
-    # loading (see Session).
+    # pipeline is built at the first question (see Session).
     if id_message:
         speaker.say(id_message)
 
@@ -1124,7 +1357,8 @@ def main() -> int:
     session = Session(speaker=speaker, whisper_thread=whisper_thread,
                       prewarm_thread=prewarm_thread, background=background,
                       background_errors=background_errors,
-                      build_kwargs=build_kwargs)
+                      build_kwargs=build_kwargs,
+                      min_audio_ctx=args.whisper_audio_ctx)
 
     def _write_status(warm: dict) -> None:
         """Safe from any thread; reports through the session's notes."""
@@ -1138,44 +1372,13 @@ def main() -> int:
             session.note(f"warn: could not write {args.status_file}: {e}")
 
     # --- Warm up ----------------------------------------------------------
-    # With the components already loaded, the pipeline builds in
-    # milliseconds, and the species' retrieval and prompt assembly run here
-    # because they use the corpus connection this thread owns. The LLM
-    # prefill for that prompt is pure HTTP, so it runs on a thread while the
-    # announcement plays and the visitor asks a first question. A question
-    # that arrives before it finishes queues behind it on the model server
-    # and reuses the prefix it cached. With the components still loading,
-    # all of this is skipped: the first real question does the same prefill.
-    if session.components_ready():
-        pipeline = session.pipeline()
-        messages, warm = pipeline.warmup_prompt(species_id)
-        print("warmup prompt ready ("
-              + ", ".join(f"{k}={v * 1000:.0f}ms" for k, v in warm.items()
-                          if isinstance(v, float))
-              + "); LLM prefill continues in the background")
-        # growth_check(pipeline, species_id, n=12)
-        if messages is None:
-            print(f"warn: warmup: {warm.get('error')}", file=sys.stderr)
-            _write_status(warm)
-        else:
-            def _warm_llm_bg():
-                t0 = time.perf_counter()
-                error = pipeline.warm_llm(messages)
-                warm["llm"] = time.perf_counter() - t0
-                if error:
-                    warm["error"] = error
-                    session.note(f"warn: warmup: {error}")
-                else:
-                    session.note(f"  LLM prefill for {species_id} done in "
-                                 f"{warm['llm']:.1f}s")
-                _write_status(warm)
-
-            threading.Thread(target=_warm_llm_bg, name="llm-warm",
-                             daemon=True).start()
-    else:
-        print("pipeline components still loading; the first question will "
-              "wait for them", flush=True)
-        _write_status({"deferred": "pipeline built at the first question"})
+    # Prefill the LLM with this species' prompt on its own thread, as soon
+    # as the prewarmed components exist, so the first question reuses the
+    # cached system prompt + SPECIES FACTS instead of processing them from
+    # scratch. It never blocks the visitor, and it stands down if a question
+    # gets there first (see Session.start_species_warmup).
+    _write_status({"pending": "species warmup running"})
+    session.start_species_warmup(species_id, on_done=_write_status)
 
     return voice_repl(session, species_id, speaker)
 
