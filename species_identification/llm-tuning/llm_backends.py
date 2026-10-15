@@ -6,12 +6,14 @@ Two backends with the same interface:
   - LlamaCppBackend: Uno Q deployment via llama.cpp's OpenAI-compatible
     /v1/chat/completions endpoint.
 
-Both expose `name`, `model`, and
-`generate(messages, *, max_tokens=None) -> str`. Sampling params are pinned
-identically on both so cross-environment differences come from the runtime,
-not the sampler. `max_tokens` overrides the shared cap for one call — used
-by pipeline_factory.prewarm_components() to send a 1-token request that
-makes the server load its weights and cache the system prompt.
+Both expose `name`, `model`, `generate(messages, *, max_tokens=None) -> str`
+and `stream(messages, *, max_tokens=None) -> Iterator[str]`, which yields
+text deltas as the server produces them (the pipeline speaks each sentence
+as soon as it is complete). Sampling params are pinned identically on both
+so cross-environment differences come from the runtime, not the sampler.
+`max_tokens` overrides the shared cap for one call — used by
+pipeline_factory.prewarm_components() to send a 1-token request that makes
+the server load its weights and cache the system prompt.
 
 This module deliberately has no dependencies on any other RoboRanger
 module — anything that needs an LLM client can import from here without
@@ -22,6 +24,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
+from typing import Iterator
 
 
 # Shared sampling params. Pin these on both backends so cross-environment
@@ -48,12 +51,12 @@ class OllamaBackend:
         self.model = model
         self.host = host
 
-    def generate(self, messages: list[dict], *,
-                 max_tokens: int | None = None) -> str:
+    def _request(self, messages: list[dict], max_tokens: int | None,
+                 stream: bool) -> urllib.request.Request:
         body = json.dumps({
             "model": self.model,
             "messages": messages,
-            "stream": False,
+            "stream": stream,
             "options": {
                 "temperature": SAMPLING["temperature"],
                 "top_p": SAMPLING["top_p"],
@@ -62,14 +65,35 @@ class OllamaBackend:
                 "num_predict": max_tokens or SAMPLING["max_tokens"],
             },
         }).encode()
-        req = urllib.request.Request(
+        return urllib.request.Request(
             f"{self.host}/api/chat",
             data=body,
             headers={"Content-Type": "application/json"},
         )
+
+    def generate(self, messages: list[dict], *,
+                 max_tokens: int | None = None) -> str:
+        req = self._request(messages, max_tokens, stream=False)
         with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read())
         return data["message"]["content"]
+
+    def stream(self, messages: list[dict], *,
+               max_tokens: int | None = None) -> Iterator[str]:
+        """Yield content deltas from Ollama's NDJSON stream."""
+        req = self._request(messages, max_tokens, stream=True)
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            for line in resp:
+                if not line.strip():
+                    continue
+                data = json.loads(line)
+                if "error" in data:
+                    raise RuntimeError(f"ollama: {data['error']}")
+                content = (data.get("message") or {}).get("content")
+                if content:
+                    yield content
+                if data.get("done"):
+                    return
 
 
 class LlamaCppBackend:
@@ -87,22 +111,51 @@ class LlamaCppBackend:
         self.host = host
         self.model = model
 
-    def generate(self, messages: list[dict], *,
-                 max_tokens: int | None = None) -> str:
+    def _request(self, messages: list[dict], max_tokens: int | None,
+                 stream: bool) -> urllib.request.Request:
         body = json.dumps({
             "model": self.model,
             "messages": messages,
+            "stream": stream,
             "temperature": SAMPLING["temperature"],
             "top_p": SAMPLING["top_p"],
             "top_k": SAMPLING["top_k"],
             "seed": SAMPLING["seed"],
             "max_tokens": max_tokens or SAMPLING["max_tokens"],
+            # Reuse the KV cache for a shared prompt prefix (the system
+            # prompt + SPECIES FACTS the startup warmup already processed).
+            # Default on in current llama-server; explicit for older builds.
+            "cache_prompt": True,
         }).encode()
-        req = urllib.request.Request(
+        return urllib.request.Request(
             f"{self.host}/v1/chat/completions",
             data=body,
             headers={"Content-Type": "application/json"},
         )
+
+    def generate(self, messages: list[dict], *,
+                 max_tokens: int | None = None) -> str:
+        req = self._request(messages, max_tokens, stream=False)
         with urllib.request.urlopen(req, timeout=300) as resp:
             data = json.loads(resp.read())
         return data["choices"][0]["message"]["content"]
+
+    def stream(self, messages: list[dict], *,
+               max_tokens: int | None = None) -> Iterator[str]:
+        """Yield content deltas from the server-sent-events stream."""
+        req = self._request(messages, max_tokens, stream=True)
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            for raw in resp:
+                line = raw.decode("utf-8").strip()
+                if not line.startswith("data:"):
+                    continue
+                payload = line[len("data:"):].strip()
+                if payload == "[DONE]":
+                    return
+                data = json.loads(payload)
+                if "error" in data:
+                    raise RuntimeError(f"llama.cpp: {data['error']}")
+                choices = data.get("choices") or [{}]
+                content = (choices[0].get("delta") or {}).get("content")
+                if content:
+                    yield content

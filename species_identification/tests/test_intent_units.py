@@ -161,6 +161,13 @@ class TestIntentClassifier:
         for s in r.all_scores.values():
             assert -1.001 <= s <= 1.001
 
+    def test_precomputed_embedding_is_used(self, stub_clf):
+        # The pipeline encodes the query once and hands the vector over; the
+        # text is then only checked for emptiness.
+        q_emb = stub_clf.embedder.encode(["__intent__:DIET"])[0]
+        r = stub_clf.classify("anything at all", q_emb=q_emb)
+        assert r == stub_clf.classify("__intent__:DIET")
+
 
 # ===========================================================================
 # Wildlife gate tests
@@ -215,6 +222,11 @@ class TestWildlifeGate:
         np.testing.assert_allclose(
             r.margin, r.wildlife_score - r.off_topic_score, atol=1e-5
         )
+
+    def test_precomputed_embedding_is_used(self, stub_gate):
+        q_emb = stub_gate.embedder.encode(["__wildlife__"])[0]
+        r = stub_gate.check("anything at all", q_emb=q_emb)
+        assert r == stub_gate.check("__wildlife__")
 
 
 

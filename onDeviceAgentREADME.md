@@ -12,7 +12,7 @@ Devpost: https://devpost.com/software/roboranger?ref_content=my-projects-tab&ref
 
 The primary entry point is **`full_roboranger_run.py`**, which integrates all four components into one session. On startup it identifies the species from the camera once, announces what it sees, then enters a push-to-talk Q&A loop for the rest of the session. Utility scripts cover isolated testing:
 
-- **`full_roboranger_run.py`** ← main entry point. Loads Piper first (so it can speak errors), checks the corpus, starts two background threads that load Whisper and the whole Q&A pipeline while the visitor aims the camera, classifies one frame, announces the species (or says why it couldn't and lets you retry) while the LLM prefills that species' prompt, then loops on push-to-talk questions.
+- **`full_roboranger_run.py`** ← main entry point. Loads Piper first (so it can speak errors), checks the corpus, starts two background threads that load Whisper and the whole Q&A pipeline while the visitor aims the camera, classifies one frame, announces the species right away (or says why it couldn't and lets you retry), then loops on push-to-talk questions while the LLM prefills that species' prompt in the background. Answers are spoken sentence by sentence while the LLM is still generating.
 - **`live_inference_mv3.py`** — headless camera loop only, for any model directory (`--model-dir`). Classifies every frame at 2 Hz with TTA and temperature scaling, logs to a per-model CSV, saves annotated captures. `live_inference_mv2.py` is the same loop defaulting to the MobileNetV2-QAT model.
 - **`voice_loop.py`** — voice loop without camera ID. Requires `--species` as a CLI argument; useful for testing the Q&A pipeline against a known species.
 - **`run_pipeline.py`** — text-only REPL and latency profiler. No audio hardware needed.
@@ -45,29 +45,29 @@ Species identification happens **once at session start**. The camera is opened, 
   conf ≥ id_threshold & not seashore?           │
     (else say why and retry)                    │
   Camera released                               │
-           │                                    │
-           └──────────────┬─────────────────────┘
-                          │  (join prewarm thread)
-                          ▼
-         Build RoboRangerPipeline  (~4 ms: open corpus.db,
-         BlurbStore, wire up the prewarmed components)
+           │                                (not joined: the first
+           ▼                                 question waits for it
+  say "I see a <common name>"                only if it's still running)
+  (Speaker threads; returns at once)
+           │
+  components already loaded?
+    yes → Build RoboRangerPipeline (~4 ms: open corpus.db,
+          BlurbStore, wire up the prewarmed components)
+          warmup_prompt(species): gate + intent + partition KNN
+          [thread] warm_llm(): prefill the species prompt
+          (not joined: a question that arrives first queues
+          behind it on llama-server and reuses its prefix)
+    no  → skip; the first question builds the pipeline
                           │
-         warmup_prompt(species): gate + intent + partition KNN
-                          │
-           ┌──────────────┴──────────────┐
-           ▼                             ▼
-  speak "I see a <species>"      [thread] warm_llm():
-                                 prefill the species prompt
-           └──────────────┬──────────────┘
-                          │  (join whisper + llm-warm threads)
-                          ▼
-       write device_status.json (corpus + model versions)
+       write device_status.json (corpus + model versions;
+       rewritten when warm_llm finishes)
                           │
                  ══ VOICE LOOP (per turn) ══
                           │
+              wait until the Speaker is quiet
               push-to-talk: Enter to record
                           │
-              whisper.transcribe()
+              whisper.transcribe()  (first turn joins whisper-load)
                           │
                           ▼
     ┌──────────────────────────────────────────────┐
@@ -76,6 +76,8 @@ Species identification happens **once at session start**. The camera is opened, 
     │  1. WildlifeGate                             │
     │     Two embedding centroids.                 │
     │     Any positive margin → accept.            │
+    │     The query is encoded once and shared     │
+    │     with the intent classifier.              │
     │     off-topic? → fixed message, loop         │
     │                                              │
     │  2. BlurbStore.get(species_id)               │
@@ -101,9 +103,14 @@ Species identification happens **once at session start**. The camera is opened, 
     │                                              │
     │  7. LlamaCppBackend → llama.cpp :8080        │
     │     SmolLM2-360M-q8_0, max_tokens=100        │
+    │     Cues the filler line, then streams:      │
+    │     each complete sentence is handed over    │
+    │     as soon as it is generated; a fragment   │
+    │     cut off by max_tokens is dropped.        │
     └──────────────────────────────────────────────┘
                           │
-              piper.synthesize_wav() → aplay
+              Speaker: piper synth thread → aplay thread
+              (sentence N+1 synthesizes while N plays)
                           │
                      back to loop
 ```
@@ -123,16 +130,26 @@ Identification is the one moment in a session when the visitor is busy — aimin
 | Classifier load + 4-view `identify()` | main thread | 4 × 94.7 ms + preprocessing on the UNO Q (see the device benchmark below) | it *produces* the species |
 | `build_pipeline(components=...)`: open `corpus.db` + `BlurbStore`, wire up the prewarmed parts | main thread | **4 ms** | yes |
 | `warmup_prompt()`: gate, intent, partition KNN, prompt assembly | main thread | 40 ms | yes |
-| `warm_llm()`: prefill the species prompt | `llm-warm`, overlapping the announcement | 2.2 s | yes |
+| `warm_llm()`: prefill the species prompt | `llm-warm`, overlapping the announcement and the visitor's first question; never joined | 2.2 s | yes |
 
-So ~17.6 s of loading happens while the camera is in use, and all that remains after identification is 4 ms of assembly plus a prefill the spoken "I see a …" pays for. The same work used to run *after* identification, with the visitor waiting through every second of it.
+So ~17.6 s of loading happens while the camera is in use. The announcement starts the moment identification finishes, and the push-to-talk prompt follows it: nothing is joined first. The species prefill keeps running while the visitor presses the button and talks. Whisper is joined at the first transcription. If the prewarm thread is still running, the pipeline is built at the first question.
 
 What the sequence does when things don't line up:
 
-- **The visitor is quick.** If the prewarm thread is still running when identification finishes, the device says "Got it. One moment while I get ready." instead of going silent, which buys ~2 s of cover.
+- **The visitor is quick.** If the prewarm thread is still running at identification, the announcement and the prompt don't wait for it. The first question joins it, says "One moment while I get ready." if it's still loading, and skips the species warmup, because the real question does the same prefill.
+- **A question beats the species prefill.** llama-server works through one request at a time, so the question queues behind the 1-token warm request and then reuses the prefix it cached.
 - **The model server isn't up.** That 1-token request is what makes llama.cpp load its weights, so start `llama-server` before the app. If it isn't reachable the failure is recorded rather than raised: the run prints `warn: LLM prewarm: …`, continues, and the first visitor question pays the model load.
 - **The prewarm thread fails outright.** `build_pipeline()` falls back to loading the components inline, so a broken thread costs time instead of ending the session.
-- **Contention.** The announcement and the prefill share four cores. If TTS stutters on the device, join the `llm-warm` thread before `speak()` to serialize them again.
+- **Contention.** The announcement, the prefill and the first transcription share four cores. Background threads log through the session and the loop prints those lines between turns, so they don't land in the middle of the push-to-talk prompt.
+
+### Per-turn speech
+
+The 100-token cap stops SmolLM2 mid-sentence, and generating a full answer on the UNO Q takes long enough (~20 s) that synthesizing it only afterwards left the visitor in silence. So each turn now overlaps generation, synthesis and playback:
+
+- **Filler line.** When a question takes an LLM path, `answer(on_llm_start=…)` cues a filler line ("Gathering all the information...", "Let me check my field notes.", "Good question. One moment."; they rotate). Each line is rendered while the speaker is idle at startup, so playing it takes no CPU away from prompt processing. Direct-route answers skip the filler.
+- **Streaming.** `answer(on_sentence=…)` streams from the backend (`LlamaCppBackend.stream()` / `OllamaBackend.stream()`) and hands over each sentence as soon as it is complete. A trailing fragment cut off by `max_tokens` is dropped, both when streaming and in plain `generate()` answers. Initials ("M. melodia"), "U.S.", "e.g." and decimals don't count as sentence ends.
+- **Speaker.** `full_roboranger_run.Speaker` runs a piper synth thread and a player thread, so sentence N+1 is synthesized while sentence N plays. Piper splits longer texts (direct-route answers, the announcement) into sentences, and each sentence becomes its own clip. Every clip starts with 120 ms of silence so a freshly opened output device doesn't clip the first syllable; this replaces the old `"-" + text` workaround.
+- **Timing table.** All rows are measured from button-up: `stt` (transcription only), the pipeline stages, `llm_first_sentence`, `first_audio` (usually the filler), `first_answer`, `tts_synth` and `total_voice` (to the end of speech). The old `stt` row included the time spent waiting to press Enter and talking, and the old `tts` row included playback.
 
 ### Stage descriptions
 
@@ -146,8 +163,8 @@ What the sequence does when things don't line up:
 | Direct route | `species_identification/pipeline/pipeline.py` | High-confidence simple intents (danger, diet, habitat, size, behavior, description) answered from blurb fields — no retrieval, no LLM. Sub-millisecond. A missing field falls through to retrieval + LLM. |
 | Retrieval | `species_identification/tests/test_corpus.py` | Exact KNN inside the species' sqlite-vec partition (`species_id` partition key), excluding the blurb chunk. L2 distance → cosine; chunks below threshold dropped. |
 | Prompt builder | `species_identification/llm-tuning/prompt_builder.py` | Assembles system + user messages. Intent drives which blurb fields lead and which template is used. Handles danger polarity. |
-| LLM | `species_identification/llm-tuning/llm_backends.py` | `LlamaCppBackend` posts to llama.cpp's `/v1/chat/completions` at `localhost:8080`. temp=0.2, max_tokens=100 (same for the Ollama backend used on the laptop). |
-| TTS | `full_roboranger_run.py` | piper-tts synthesizes to a temp WAV, played via `aplay`. |
+| LLM | `species_identification/llm-tuning/llm_backends.py` | `LlamaCppBackend` posts to llama.cpp's `/v1/chat/completions` at `localhost:8080` with `cache_prompt: true`; `stream()` reads the server-sent events. temp=0.2, max_tokens=100 (same for the Ollama backend used on the laptop, which streams NDJSON). |
+| TTS | `full_roboranger_run.py` | `Speaker`: a piper synth thread writes one WAV per sentence and a player thread plays them with `aplay` (`winsound` on Windows) while the next one is synthesized. |
 | Pipeline construction | `species_identification/pipeline/pipeline_factory.py` | Two-stage, so loading can overlap the camera. `prewarm_components()` builds the embedder, centroids and LLM backend and touches no sqlite, so it runs on any thread; `build_pipeline(components=…)` then opens `corpus.db` and the `BlurbStore` on the thread that will use them (~4 ms). Called with no `components` it loads everything itself, which is what the text and voice-only entry points do. |
 
 ---
@@ -252,7 +269,7 @@ cd ~/llama.cpp/build/bin
 `~/models/smollm2-360m.gguf` is a symbolic link to the actual location for the installed model, so replace it with the actual path to the model.
 `--cache-prompt` reuses the longest common prompt prefix between requests. The system prompt and the species header are identical across turns; the order of the blurb fields depends on the question's intent, so only turns with the same intent reuse the whole SPECIES FACTS block.
 
-**Start this before `full_roboranger_run.py`.** Startup sends the server two prefill-only requests (`max_tokens=1`): one while the camera is being aimed, carrying the real system prompt — that is what makes llama.cpp load its weights and cache the prefix — and one for the identified species' prompt, which runs while the announcement plays. If the server isn't reachable, the run prints `warn: LLM prewarm: …` and carries on; the first visitor question then pays the model load.
+**Start this before `full_roboranger_run.py`.** Startup sends the server two prefill-only requests (`max_tokens=1`): one while the camera is being aimed, carrying the real system prompt — that is what makes llama.cpp load its weights and cache the prefix — and one for the identified species' prompt, which runs while the announcement plays and the visitor asks a first question. If the server isn't reachable, the run prints `warn: LLM prewarm: …` and carries on; the first visitor question then pays the model load.
 
 ### 4. Benchmark the classifier on the device
 

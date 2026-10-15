@@ -166,11 +166,16 @@ class WildlifeGate:
             c = c / n
         return c
 
-    def check(self, query: str) -> GateResult:
+    def check(self, query: str, q_emb: np.ndarray | None = None) -> GateResult:
+        """q_emb: the query's embedding from this gate's embedder, if the
+        caller already has it (the pipeline shares one encode with the
+        intent classifier)."""
         if not query or not query.strip():
             return GateResult(False, "high", 0.0, 0.0, 0.0)
 
-        q_emb = np.asarray(self.embedder.encode([query]), dtype=np.float32)[0]
+        if q_emb is None:
+            q_emb = self.embedder.encode([query])[0]
+        q_emb = np.asarray(q_emb, dtype=np.float32)
         if self.normalize:
             n = np.linalg.norm(q_emb)
             if n > 0:

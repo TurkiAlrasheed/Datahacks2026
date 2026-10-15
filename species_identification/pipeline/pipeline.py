@@ -21,7 +21,7 @@ Wires the components into a single end-to-end query path:
     [build_messages]
         |
         v
-    [LLMBackend.generate] -> reject path: llm_error
+    [LLMBackend.generate | .stream] -> reject path: llm_error
         |
         v
     Response
@@ -29,6 +29,12 @@ Wires the components into a single end-to-end query path:
 The orchestrator does no I/O beyond what the components do. It does no
 logging by default — every fact a caller might want to log is on the
 returned Response. Caller decides what to print.
+
+Answers always end on a complete sentence: max_tokens cuts generation off
+mid-word, so a trailing fragment is dropped. A caller that wants to speak
+while the model is still generating passes on_sentence= to answer(); each
+finished sentence is handed over as soon as it is complete (the caller owns
+the audio, so this file still does no audio I/O).
 
 This file contains only orchestration logic. Component construction
 (loading the embedder, opening the DB, picking the LLM backend) belongs
@@ -38,11 +44,14 @@ from a config" helper.
 
 from __future__ import annotations
 
+import re
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Callable, Iterator, Literal, Protocol
+
+import numpy as np
 
 # Resolve sibling packages from this file's location, not the caller's CWD.
 _SPECIES_DIR = Path(__file__).resolve().parents[1]
@@ -112,12 +121,81 @@ DIRECT_ROUTE_INTENTS = frozenset({
     Intent.DESCRIPTION,   # -> appearance + notable
 })
 
+
+# ---------------------------------------------------------------------------
+# Sentence boundaries
+# ---------------------------------------------------------------------------
+
+# Terminal punctuation plus any closing quote/bracket, followed by
+# whitespace or the end of the text. "25.4" never matches (no whitespace
+# after the period).
+_SENTENCE_END = re.compile(r"""[.!?]+["'”’)\]]*(?=\s|$)""")
+# The text already ends on a finished sentence.
+_TRAILING_END = re.compile(r"""[.!?]["'”’)\]]*$""")
+# Words whose period is not a sentence end. Single letters are handled
+# separately: genus initials ("M. melodia") and "U.S." show up in answers.
+_ABBREVIATIONS = frozenset({
+    "e.g", "i.e", "vs", "approx", "ca", "dr", "mr", "mrs", "ms", "st", "mt",
+    "jr", "sr",
+})
+
+
+def _is_abbreviation(text: str, dot: int) -> bool:
+    """True when the period at text[dot] belongs to an abbreviation."""
+    parts = text[:dot].rsplit(None, 1)
+    word = parts[-1].lstrip("\"'(“‘[") if parts else ""
+    last = word.rsplit(".", 1)[-1]
+    return (len(last) == 1 and last.isalpha()) or word.lower() in _ABBREVIATIONS
+
+
+def _sentence_ends(text: str) -> Iterator[int]:
+    """Offsets just past each sentence-ending punctuation run in text."""
+    for m in _SENTENCE_END.finditer(text):
+        if m.group()[0] != "." or not _is_abbreviation(text, m.start()):
+            yield m.end()
+
+
+def split_complete_sentences(text: str) -> tuple[list[str], str]:
+    """
+    Split off the sentences that are definitely finished, for streaming.
+    Returns (sentences, rest). A boundary at the very end of `text` is left
+    in `rest`, because more tokens may still be coming ("25." -> "25.4").
+    """
+    sentences: list[str] = []
+    start = 0
+    for end in _sentence_ends(text):
+        if end == len(text):
+            break
+        sentence = text[start:end].strip()
+        if sentence:
+            sentences.append(sentence)
+        start = end
+    return sentences, text[start:]
+
+
+def trim_incomplete_sentence(text: str) -> str:
+    """
+    Drop a trailing fragment the max_tokens cap cut off mid-sentence. Text
+    with no complete sentence at all is returned whole: a fragment is
+    better than silence.
+    """
+    text = text.strip()
+    if _TRAILING_END.search(text):
+        return text
+    ends = list(_sentence_ends(text))
+    return text[:ends[-1]] if ends else text
+
+
 # ---------------------------------------------------------------------------
 # Protocols (structural typing — any object with these methods works)
 # ---------------------------------------------------------------------------
 
 class LLMBackend(Protocol):
-    """Anything with .name and .generate(messages) -> str."""
+    """
+    Anything with .name and .generate(messages) -> str. A backend may also
+    have .stream(messages) -> Iterator[str] (text deltas); answer() uses it
+    when the caller asks for sentences as they are generated.
+    """
     name: str
     def generate(self, messages: list[dict], *,
                  max_tokens: int | None = None) -> str: ...
@@ -154,6 +232,9 @@ class Response:
     chunks_dropped: int = 0      # how many were filtered by threshold
     error: str | None = None
     latency: dict[str, float] = field(default_factory=dict)
+    # True when `text` was already delivered sentence by sentence through
+    # answer(on_sentence=...), so the caller must not speak it again.
+    streamed: bool = False
 
     @property
     def used_llm(self) -> bool:
@@ -200,14 +281,42 @@ class RoboRangerPipeline:
 
     # -- the main entry point ------------------------------------------------
 
-    def answer(self, species_id: str, query: str) -> Response:
-        """Run the full pipeline for one (species_id, query) pair."""
+    def answer(
+        self,
+        species_id: str,
+        query: str,
+        *,
+        on_llm_start: Callable[[], None] | None = None,
+        on_sentence: Callable[[str], None] | None = None,
+    ) -> Response:
+        """
+        Run the full pipeline for one (species_id, query) pair.
+
+        on_llm_start: called once, just before the LLM request, and only on
+            the paths that use the LLM (the slow ones). A voice front-end
+            plays a "one moment" line from it.
+        on_sentence: when given and the backend can stream, the answer is
+            streamed and each complete sentence is passed here as soon as
+            it is generated. Response.streamed then says the text has
+            already been delivered. Every other path returns its text the
+            usual way and leaves streamed False.
+        """
         latency: dict[str, float] = {}
         t0 = time.perf_counter()
 
-        # 1. Wildlife gate
+        # 1. Wildlife gate. The gate and the intent classifier embed the
+        # same raw query, so encode it once and hand the vector to both
+        # (each encode is ~240 ms on the UNO Q). "gate" therefore includes
+        # the encode and "intent" is just the centroid scoring.
         t = time.perf_counter()
-        gate_result = self.gate.check(query)
+        q_emb = None
+        if query.strip() and (self._shares_embedder(self.gate)
+                              or self._shares_embedder(self.intent_classifier)):
+            q_emb = np.asarray(self.embedder.encode([query])[0],
+                               dtype=np.float32)
+        gate_result = (self.gate.check(query, q_emb=q_emb)
+                       if self._shares_embedder(self.gate)
+                       else self.gate.check(query))
         latency["gate"] = time.perf_counter() - t
         if gate_result.reject:
             latency["total"] = time.perf_counter() - t0
@@ -244,7 +353,10 @@ class RoboRangerPipeline:
         # misses some edge cases). Short-circuit to a fixed message rather
         # than letting the LLM fabricate an answer.
         t = time.perf_counter()
-        intent_result = self.intent_classifier.classify(query)
+        intent_result = (
+            self.intent_classifier.classify(query, q_emb=q_emb)
+            if self._shares_embedder(self.intent_classifier)
+            else self.intent_classifier.classify(query))
         latency["intent"] = time.perf_counter() - t
 
         if (
@@ -314,26 +426,41 @@ class RoboRangerPipeline:
         latency["prompt"] = time.perf_counter() - t
 
         # 6. LLM call. Failures here should be visible (logged) but
-        # recoverable from the user's perspective.
+        # recoverable from the user's perspective. The answer is cut back to
+        # its last complete sentence: max_tokens stops generation mid-word.
+        if on_llm_start is not None:
+            on_llm_start()
+        stream = getattr(self.llm, "stream", None) if on_sentence else None
+        spoken: list[str] = []   # sentences already passed to on_sentence
+        error = None
         t = time.perf_counter()
         try:
-            text = self.llm.generate(messages).strip()
+            if stream is None:
+                text = trim_incomplete_sentence(self.llm.generate(messages))
+            else:
+                text = self._stream_sentences(stream(messages), on_sentence,
+                                              spoken, latency, t)
         except Exception as e:
-            latency["llm"] = time.perf_counter() - t
-            latency["total"] = time.perf_counter() - t0
-            return Response(
-                text=MSG_LLM_ERROR,
-                path="llm_error",
-                species_id=species_id,
-                query=query,
-                gate=gate_result,
-                intent=intent_result,
-                blurb=blurb,
-                chunks_used=chunks,
-                chunks_dropped=dropped,
-                error=f"{type(e).__name__}: {e}",
-                latency=latency,
-            )
+            error = f"{type(e).__name__}: {e}"
+            if not spoken:
+                latency["llm"] = time.perf_counter() - t
+                latency["total"] = time.perf_counter() - t0
+                return Response(
+                    text=MSG_LLM_ERROR,
+                    path="llm_error",
+                    species_id=species_id,
+                    query=query,
+                    gate=gate_result,
+                    intent=intent_result,
+                    blurb=blurb,
+                    chunks_used=chunks,
+                    chunks_dropped=dropped,
+                    error=error,
+                    latency=latency,
+                )
+            # Part of the answer has already been spoken; that part is the
+            # answer the visitor got.
+            text = " ".join(spoken)
         latency["llm"] = time.perf_counter() - t
         latency["total"] = time.perf_counter() - t0
 
@@ -348,7 +475,9 @@ class RoboRangerPipeline:
             blurb=blurb,
             chunks_used=chunks,
             chunks_dropped=dropped,
+            error=error,
             latency=latency,
+            streamed=bool(spoken),
         )
 
     def warmup_prompt(self, species_id: str
@@ -428,6 +557,42 @@ class RoboRangerPipeline:
         return timings
 
     # -- internal helpers ---------------------------------------------------
+
+    def _shares_embedder(self, component) -> bool:
+        """True when a gate/classifier encodes with this pipeline's embedder,
+        so a query vector from self.embedder can be handed to it. Test stubs
+        and components built on another model don't qualify."""
+        return getattr(component, "embedder", None) is self.embedder
+
+    @staticmethod
+    def _stream_sentences(deltas: Iterator[str],
+                          on_sentence: Callable[[str], None],
+                          spoken: list[str],
+                          latency: dict[str, float],
+                          t_start: float) -> str:
+        """
+        Accumulate streamed text deltas and pass each complete sentence to
+        on_sentence as soon as it is finished, appending it to `spoken` so
+        the caller knows what was delivered if the stream fails midway.
+        At the end, a trailing fragment cut off by max_tokens is dropped
+        (same rule as trim_incomplete_sentence). Returns the full answer.
+        """
+        buf = ""
+        for delta in deltas:
+            buf += delta
+            sentences, buf = split_complete_sentences(buf)
+            for sentence in sentences:
+                if not spoken:
+                    latency["llm_first_sentence"] = time.perf_counter() - t_start
+                spoken.append(sentence)
+                on_sentence(sentence)
+        tail = buf.strip()
+        if tail and (_TRAILING_END.search(tail) or not spoken):
+            if not spoken:
+                latency["llm_first_sentence"] = time.perf_counter() - t_start
+            spoken.append(tail)
+            on_sentence(tail)
+        return " ".join(spoken)
 
     def _retrieve_filtered(
         self, species_id: str, query: str,

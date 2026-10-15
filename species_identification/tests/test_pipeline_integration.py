@@ -17,6 +17,10 @@ every code path:
     - retrieval is scoped to the species and never returns the blurb chunk
     - a v1 (unpartitioned) corpus is refused by check_corpus_schema
     - warmup() reaches retrieval + LLM and reports a failing LLM
+    - sentence splitting / trimming of answers cut off by max_tokens
+    - streaming: sentences handed over while generating, filler cue,
+      stream failures before / after the first sentence
+    - the gate and intent classifier share one query encode
 
 This isn't testing the *quality* of the pipeline — that's what the eval
 harnesses are for. This is testing the *plumbing*: every component is
@@ -55,7 +59,12 @@ from corpus_schema import (  # noqa: E402
     refresh_manifest,
 )
 from intent import Intent, IntentResult  # noqa: E402
-from pipeline import RoboRangerPipeline  # noqa: E402
+from pipeline import (  # noqa: E402
+    MSG_LLM_ERROR,
+    RoboRangerPipeline,
+    split_complete_sentences,
+    trim_incomplete_sentence,
+)
 from test_corpus import retrieve  # noqa: E402
 
 
@@ -112,6 +121,7 @@ class StubLLM:
         self.calls: list[list[dict]] = []
         self.max_tokens: list[int | None] = []
         self.should_raise = False
+        self.response = "stub response"
 
     def generate(self, messages: list[dict], *,
                  max_tokens: int | None = None) -> str:
@@ -119,7 +129,30 @@ class StubLLM:
             raise RuntimeError("stub error")
         self.calls.append(messages)
         self.max_tokens.append(max_tokens)
-        return "stub response"
+        return self.response
+
+
+class StreamingStubLLM(StubLLM):
+    """
+    Yields `deltas` one at a time, logging each to `events` so a test can
+    check that sentences were handed over before the stream finished.
+    Raises once `fail_after` deltas have been yielded, if set.
+    """
+
+    def __init__(self, deltas: list[str], events: list) -> None:
+        super().__init__()
+        self.deltas = deltas
+        self.events = events
+        self.fail_after: int | None = None
+
+    def stream(self, messages: list[dict], *,
+               max_tokens: int | None = None):
+        self.calls.append(messages)
+        for i, delta in enumerate(self.deltas):
+            if self.fail_after is not None and i == self.fail_after:
+                raise RuntimeError("stream broke")
+            self.events.append(("delta", i))
+            yield delta
 
 
 class FixedClassifier:
@@ -450,6 +483,143 @@ def main() -> int:
     check("LLM failure reported, not raised", "error" in timings,
           str(timings))
     llm.should_raise = False
+
+    print("\n=== test 12: sentence splitting and trimming ===")
+    sentences, rest = split_complete_sentences(
+        "The M. melodia sings. It measures 25.4 cm, e.g. adults. It is")
+    check("initials, decimals and e.g. are not sentence ends",
+          sentences == ["The M. melodia sings.",
+                        "It measures 25.4 cm, e.g. adults."]
+          and rest == " It is", f"{sentences} / {rest!r}")
+    sentences, rest = split_complete_sentences("It measures 25.")
+    check("a boundary at the end of a stream buffer waits for more text",
+          sentences == [] and rest == "It measures 25.", f"{sentences}")
+    for text, want in (
+        ("It eats seeds. The song sparrow is known for",
+         "It eats seeds."),
+        ("It eats seeds. It sings!", "It eats seeds. It sings!"),
+        ("Common across the U.S.", "Common across the U.S."),
+        ('They call it "the singer." It is', 'They call it "the singer."'),
+        ("known for its", "known for its"),   # nothing complete: keep it
+    ):
+        got = trim_incomplete_sentence(text)
+        check(f"trim {text!r}", got == want, f"got {got!r}")
+
+    # Tests 13-17 use the retrieval + LLM path with all chunks kept.
+    pipeline.intent_classifier = FixedClassifier(Intent.IDENTIFICATION)
+    pipeline.retrieval_threshold = -1.0
+
+    print("\n=== test 13: a cut-off answer is trimmed (no streaming) ===")
+    if wildlife_query is None:
+        print("  [SKIP]")
+    else:
+        llm.response = "First sentence. Second one was cut off mid"
+        resp = pipeline.answer("Test_species", wildlife_query,
+                               on_sentence=lambda s: None)
+        check("trailing fragment dropped", resp.text == "First sentence.",
+              resp.text)
+        check("backend without stream(): not streamed", not resp.streamed)
+        llm.response = "stub response"
+
+    print("\n=== test 14: streaming hands over sentences as generated ===")
+    events: list = []
+    streaming = StreamingStubLLM(
+        ["The M.", " melodia sings", ". It measures 25", ".4 cm. Its song",
+         " is known for"], events)
+    pipeline.llm = streaming
+    if wildlife_query is None:
+        print("  [SKIP]")
+    else:
+        resp = pipeline.answer(
+            "Test_species", wildlife_query,
+            on_llm_start=lambda: events.append(("llm_start",)),
+            on_sentence=lambda s: events.append(("sentence", s)))
+        spoken = [e[1] for e in events if e[0] == "sentence"]
+        check("complete sentences emitted, cut-off fragment dropped",
+              spoken == ["The M. melodia sings.", "It measures 25.4 cm."],
+              str(spoken))
+        check("first sentence handed over before the stream finished",
+              events.index(("sentence", "The M. melodia sings."))
+              < events.index(("delta", 4)), str(events))
+        check("filler cue fires once, before the first sentence",
+              events.count(("llm_start",)) == 1 and events[0] == ("llm_start",),
+              str(events))
+        check("Response.text is what was spoken, streamed=True",
+              resp.text == " ".join(spoken) and resp.streamed,
+              f"{resp.text!r} streamed={resp.streamed}")
+        check("latency has llm_first_sentence and llm",
+              "llm_first_sentence" in resp.latency and "llm" in resp.latency,
+              str(sorted(resp.latency)))
+
+        events.clear()
+        streaming.deltas = ["One. ", "Two."]
+        resp = pipeline.answer("Test_species", wildlife_query,
+                               on_sentence=lambda s: events.append(
+                                   ("sentence", s)))
+        check("a finished last sentence is kept",
+              [e[1] for e in events if e[0] == "sentence"] == ["One.", "Two."],
+              str(events))
+
+    print("\n=== test 15: no filler or streaming on the direct route ===")
+    if wildlife_query is None:
+        print("  [SKIP]")
+    else:
+        events.clear()
+        pipeline.intent_classifier = FixedClassifier(Intent.DIET)
+        resp = pipeline.answer(
+            "Test_species", wildlife_query,
+            on_llm_start=lambda: events.append(("llm_start",)),
+            on_sentence=lambda s: events.append(("sentence", s)))
+        check("blurb_direct path", resp.path == "blurb_direct", resp.path)
+        check("no callbacks, streamed=False, caller speaks resp.text",
+              events == [] and not resp.streamed, str(events))
+        pipeline.intent_classifier = FixedClassifier(Intent.IDENTIFICATION)
+
+    print("\n=== test 16: stream failures ===")
+    if wildlife_query is None:
+        print("  [SKIP]")
+    else:
+        streaming.deltas = ["It eats seeds. It ", "also eats insects. "]
+        streaming.fail_after = 1
+        events.clear()
+        resp = pipeline.answer("Test_species", wildlife_query,
+                               on_sentence=lambda s: events.append(s))
+        check("after a spoken sentence: answer is what was spoken",
+              resp.path == "blurb_plus_chunks"
+              and resp.text == "It eats seeds." and resp.streamed
+              and "stream broke" in (resp.error or ""),
+              f"{resp.path} {resp.text!r} {resp.error}")
+        streaming.fail_after = 0
+        events.clear()
+        resp = pipeline.answer("Test_species", wildlife_query,
+                               on_sentence=lambda s: events.append(s))
+        check("before any sentence: llm_error, caller speaks the apology",
+              resp.path == "llm_error" and resp.text == MSG_LLM_ERROR
+              and not resp.streamed and events == [],
+              f"{resp.path} {resp.text!r}")
+        streaming.fail_after = None
+
+    print("\n=== test 17: gate and intent share one query encode ===")
+    pipeline.llm = llm
+    pipeline.intent_classifier = real_classifier
+    if wildlife_query is None:
+        print("  [SKIP]")
+    else:
+        raw_encode = embedder.encode
+        encoded: list[list[str]] = []
+
+        def counting_encode(texts, **kw):
+            encoded.append(list(texts))
+            return raw_encode(texts, **kw)
+
+        embedder.encode = counting_encode
+        try:
+            pipeline.answer("Test_species", wildlife_query)
+        finally:
+            embedder.encode = raw_encode
+        check("raw query encoded exactly once",
+              encoded.count([wildlife_query]) == 1, str(encoded))
+    pipeline.retrieval_threshold = 0.50
 
     print(f"\n=== {failures} failure(s) ===")
     return 1 if failures else 0
