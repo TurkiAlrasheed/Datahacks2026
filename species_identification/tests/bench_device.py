@@ -250,8 +250,9 @@ def main() -> int:
                     help="model directory (repeatable; default: deploy + "
                          "mobilenetv2_qat if present)")
     ap.add_argument("--kernels", default="ref,default",
-                    help="comma list: ref (UNO Q default, XNNPACK off) "
-                         "and/or default (XNNPACK if available)")
+                    help="comma list: ref (XNNPACK off; 14-43x slower on "
+                         "the UNO Q) and/or default (XNNPACK, the "
+                         "runtime default)")
     ap.add_argument("--threads", default="4",
                     help="comma list of interpreter thread counts")
     ap.add_argument("--runs", type=int, default=10,

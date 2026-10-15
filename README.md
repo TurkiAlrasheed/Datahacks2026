@@ -105,11 +105,11 @@ SmolLM2-360M follows short, declarative instructions well but struggles with imp
 
 ### Latency: hiding load time
 
-The UNO Q is slow to load models. Three strategies hide this from the visitor:
+The UNO Q is slow to load models, and the only stretch of a session where the visitor is busy is the few seconds they spend aiming the camera. Startup is built around that window:
 
 - **Piper loads first**, before anything else, so the device can speak error messages during the rest of startup rather than going silent.
-- **Whisper loads in a background thread** while the camera is capturing and classifying. By the time identification finishes, Whisper is ready.
-- **Real warmup + llama.cpp `--cache-prompt`**: after identification, the pipeline runs one retrieval and one LLM generation for the identified species, so the first visitor question doesn't pay model-load or cold-cache costs. `--cache-prompt` then reuses the shared prompt prefix (system prompt + species header) across turns; the blurb field order depends on the question's intent, so the rest of the prompt is re-encoded when the intent changes.
+- **Whisper and the entire Q&A pipeline load on background threads** while the camera is capturing and classifying: the embedder (whose torch import costs more than the model itself), the gate and intent centroids, and the LLM's weights, which are pulled in by a 1-token request carrying the real system prompt. On the laptop that is 17.6 s of loading the visitor never waits through, and the device is slower still. Only the corpus connection is left for the main thread — sqlite3 connections are bound to the thread that creates them — and that step takes 4 ms.
+- **The first real prompt is prefilled while the device is talking.** Once the species is known, retrieval and prompt assembly run (40 ms) and the prompt goes to llama.cpp with `max_tokens=1` on its own thread, so prompt processing overlaps the spoken "I see a …" instead of following it. `--cache-prompt` then reuses that prefix for the visitor's first real question; the blurb field order depends on the question's intent, so the rest of the prompt is re-encoded when the intent changes.
 
 ---
 

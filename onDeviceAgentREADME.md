@@ -12,7 +12,7 @@ Devpost: https://devpost.com/software/roboranger?ref_content=my-projects-tab&ref
 
 The primary entry point is **`full_roboranger_run.py`**, which integrates all four components into one session. On startup it identifies the species from the camera once, announces what it sees, then enters a push-to-talk Q&A loop for the rest of the session. Utility scripts cover isolated testing:
 
-- **`full_roboranger_run.py`** ← main entry point. Loads Piper first (so it can speak errors), checks the corpus, loads Whisper in a background thread while camera ID runs, classifies one frame, announces the species (or says why it couldn't and lets you retry), then loops on push-to-talk questions.
+- **`full_roboranger_run.py`** ← main entry point. Loads Piper first (so it can speak errors), checks the corpus, starts two background threads that load Whisper and the whole Q&A pipeline while the visitor aims the camera, classifies one frame, announces the species (or says why it couldn't and lets you retry) while the LLM prefills that species' prompt, then loops on push-to-talk questions.
 - **`live_inference_mv3.py`** — headless camera loop only, for any model directory (`--model-dir`). Classifies every frame at 2 Hz with TTA and temperature scaling, logs to a per-model CSV, saves annotated captures. `live_inference_mv2.py` is the same loop defaulting to the MobileNetV2-QAT model.
 - **`voice_loop.py`** — voice loop without camera ID. Requires `--species` as a CLI argument; useful for testing the Q&A pipeline against a known species.
 - **`run_pipeline.py`** — text-only REPL and latency profiler. No audio hardware needed.
@@ -108,12 +108,38 @@ Species identification happens **once at session start**. The camera is opened, 
                      back to loop
 ```
 
+### Startup: what loads where
+
+Identification is the one moment in a session when the visitor is busy — aiming the camera — so everything that doesn't need the species is loaded during it, on two background threads. Only work that touches the corpus stays on the main thread, because sqlite3 connections are bound to the thread that creates them.
+
+| Step | Where | Measured (laptop, Ollama) | Needs the species first? |
+|---|---|---|---|
+| Piper voice | main thread, before anything else | — | no — loaded first so later failures can be spoken |
+| `torch` + `sentence_transformers` import | `pipeline-prewarm` | 9.6 s | no |
+| bge-small embedder | `pipeline-prewarm` | 0.2 s | no |
+| Gate + intent centroids | `pipeline-prewarm` | 0.3 s | no |
+| LLM weights, pulled in by a 1-token request carrying the real system prompt | `pipeline-prewarm` | 7.4 s | no |
+| Whisper STT | `whisper-load` | — | no |
+| Classifier load + 4-view `identify()` | main thread | 4 × 94.7 ms + preprocessing on the UNO Q (see the device benchmark below) | it *produces* the species |
+| `build_pipeline(components=...)`: open `corpus.db` + `BlurbStore`, wire up the prewarmed parts | main thread | **4 ms** | yes |
+| `warmup_prompt()`: gate, intent, partition KNN, prompt assembly | main thread | 40 ms | yes |
+| `warm_llm()`: prefill the species prompt | `llm-warm`, overlapping the announcement | 2.2 s | yes |
+
+So ~17.6 s of loading happens while the camera is in use, and all that remains after identification is 4 ms of assembly plus a prefill the spoken "I see a …" pays for. The same work used to run *after* identification, with the visitor waiting through every second of it.
+
+What the sequence does when things don't line up:
+
+- **The visitor is quick.** If the prewarm thread is still running when identification finishes, the device says "Got it. One moment while I get ready." instead of going silent, which buys ~2 s of cover.
+- **The model server isn't up.** That 1-token request is what makes llama.cpp load its weights, so start `llama-server` before the app. If it isn't reachable the failure is recorded rather than raised: the run prints `warn: LLM prewarm: …`, continues, and the first visitor question pays the model load.
+- **The prewarm thread fails outright.** `build_pipeline()` falls back to loading the components inline, so a broken thread costs time instead of ending the session.
+- **Contention.** The announcement and the prefill share four cores. If TTS stutters on the device, join the `llm-warm` thread before `speak()` to serialize them again.
+
 ### Stage descriptions
 
 | Stage | File | What it does |
 |---|---|---|
 | Vision classifier | `species_identification/vision/tflite_classifier.py` | Manifest-driven TFLite classifier. Preprocessing (input domain, size, dtype), class order, temperature and threshold all come from `model_manifest.json`. 4 TTA views averaged, temperature scaled. Called once at startup, not per turn. |
-| STT | `full_roboranger_run.py` | pywhispercpp wrapping whisper.cpp. `ggml-tiny.en-q5_1.bin`. Loaded in a background thread during camera ID. |
+| STT | `full_roboranger_run.py` | pywhispercpp wrapping whisper.cpp. `ggml-tiny.en-q5_1.bin`. Loaded on the `whisper-load` thread while the visitor aims the camera. |
 | WildlifeGate | `species_identification/llm-tuning/wildlife_gate.py` | Embedding cosine sim against wildlife vs. off-topic prototype centroids. Any positive margin → accept. |
 | BlurbStore | `species_identification/pipeline/blurb_store.py` | SQLite lookup returning a typed `Blurb` dataclass. Defensive against bad JSON, missing fields, enum typos. |
 | IntentClassifier | `species_identification/llm-tuning/intent.py` | Per-intent prototype centroids. Outputs intent + confidence (high/medium/low). Same embedder, no extra model load. |
@@ -122,6 +148,7 @@ Species identification happens **once at session start**. The camera is opened, 
 | Prompt builder | `species_identification/llm-tuning/prompt_builder.py` | Assembles system + user messages. Intent drives which blurb fields lead and which template is used. Handles danger polarity. |
 | LLM | `species_identification/llm-tuning/llm_backends.py` | `LlamaCppBackend` posts to llama.cpp's `/v1/chat/completions` at `localhost:8080`. temp=0.2, max_tokens=100 (same for the Ollama backend used on the laptop). |
 | TTS | `full_roboranger_run.py` | piper-tts synthesizes to a temp WAV, played via `aplay`. |
+| Pipeline construction | `species_identification/pipeline/pipeline_factory.py` | Two-stage, so loading can overlap the camera. `prewarm_components()` builds the embedder, centroids and LLM backend and touches no sqlite, so it runs on any thread; `build_pipeline(components=…)` then opens `corpus.db` and the `BlurbStore` on the thread that will use them (~4 ms). Called with no `components` it loads everything itself, which is what the text and voice-only entry points do. |
 
 ---
 
@@ -223,7 +250,9 @@ cd ~/llama.cpp/build/bin
 ```
 
 `~/models/smollm2-360m.gguf` is a symbolic link to the actual location for the installed model, so replace it with the actual path to the model.
-`--cache-prompt` reuses the longest common prompt prefix between requests. The system prompt and the species header are identical across turns; the order of the blurb fields depends on the question's intent, so only turns with the same intent reuse the whole SPECIES FACTS block. The startup warmup primes the cache for the identified species.
+`--cache-prompt` reuses the longest common prompt prefix between requests. The system prompt and the species header are identical across turns; the order of the blurb fields depends on the question's intent, so only turns with the same intent reuse the whole SPECIES FACTS block.
+
+**Start this before `full_roboranger_run.py`.** Startup sends the server two prefill-only requests (`max_tokens=1`): one while the camera is being aimed, carrying the real system prompt — that is what makes llama.cpp load its weights and cache the prefix — and one for the identified species' prompt, which runs while the announcement plays. If the server isn't reachable, the run prints `warn: LLM prewarm: …` and carries on; the first visitor question then pays the model load.
 
 ### 4. Benchmark the classifier on the device
 
@@ -454,8 +483,8 @@ With this model, the previous fixed 0.55 threshold gives 87.7% precision / 63.5%
     │   └── tflite_classifier.py          # manifest-driven TFLite classifier with TTA
     │
     ├── pipeline/
-    │   ├── pipeline.py                   # orchestrator (gate → blurb → intent → route → LLM) + warmup
-    │   ├── pipeline_factory.py           # builds a fully wired pipeline from config
+    │   ├── pipeline.py                   # orchestrator (gate → blurb → intent → route → LLM) + split warmup
+    │   ├── pipeline_factory.py           # two-stage build: prewarm_components() (threadable) + build_pipeline()
     │   ├── pipeline_repl.py              # interactive REPL for the pipeline alone
     │   └── blurb_store.py                # structured blurb lookup from corpus.db
     │
@@ -523,6 +552,6 @@ With this model, the previous fixed 0.55 threshold gives 87.7% precision / 63.5%
 | `RETRIEVAL_K` | `pipeline.py` | 5 | Chunks retrieved from the species' partition (prompt keeps `MAX_CHUNKS = 3`) |
 | `DIRECT_ROUTE_SCORE_THRESHOLD` | `pipeline.py` | 0.65 | Minimum intent score for medium-confidence direct routing (skips LLM) |
 | `WildlifeGate.ACCEPT_MARGIN` | `wildlife_gate.py` | 0.05 | Wildlife–off-topic margin above which gate accepts with high confidence |
-| `SAMPLING["max_tokens"]` | `llm_backends.py` | 100 | LLM output cap for both backends (tuned for UNO Q speed; 200 was too slow) |
+| `SAMPLING["max_tokens"]` | `llm_backends.py` | 100 | LLM output cap for both backends (tuned for UNO Q speed; 200 was too slow). The startup prefills override it to 1 — they exist to load weights and fill the prompt cache, not to produce text nobody hears. |
 | `VEC_CHUNK_SIZE` | `corpus_schema.py` | 16 | vec0 slots per partition chunk (DB size vs. scan granularity) |
 | `EMBED_MODEL` | `corpus_schema.py` | `BAAI/bge-small-en-v1.5` | Must match the model used at corpus build time (checked at startup) |
